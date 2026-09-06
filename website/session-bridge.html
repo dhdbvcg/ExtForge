@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>Session Bridge</title></head>
+<body>
+<script>
+/* session-bridge.html —— 跨域会话桥接页
+ *
+ * 编辑器（127.0.0.1:8601 或任意域名）在隐藏 iframe 中加载此页面，
+ * 此页面读取 scratchextensioneditor.cc.cd 的 localStorage 中的登录会话，
+ * 然后通过 postMessage 把 session 回传给父窗口（编辑器）。
+ *
+ * 安全：只响应 type='request-site-session' 的消息，且不暴露敏感数据
+ *（仅返回 username / remember / expires，不含 token/salt/hash）。
+ */
+(function () {
+    'use strict';
+    var SESSION_KEY = 'extbuilder_session';
+
+    function getSession() {
+        try {
+            var raw = localStorage.getItem(SESSION_KEY);
+            if (!raw) return null;
+            var s = JSON.parse(raw);
+            if (!s || !s.username) return null;
+            if (s.expires && s.expires < Date.now()) { localStorage.removeItem(SESSION_KEY); return null; }
+            // 只回传安全字段（不含内部 token）
+            return {
+                username: s.username,
+                remember: !!s.remember,
+                expires: s.expires || 0
+            };
+        } catch (e) { return null; }
+    }
+
+    function onMessage(e) {
+        if (!e.data || e.data.type !== 'request-site-session') return;
+        var s = getSession();
+        try {
+            e.source.postMessage({ type: 'site-session-response', session: s }, e.origin);
+        } catch (err) {}
+    }
+
+    window.addEventListener('message', onMessage);
+
+    // 也主动向 parent 发一次（iframe 加载完成即推送）
+    try {
+        var s = getSession();
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'site-session-response', session: s }, '*');
+        }
+    } catch (e) {}
+})();
+</script>
+</body>
+</html>

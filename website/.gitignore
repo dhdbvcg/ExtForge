@@ -1,0 +1,6 @@
+# 本地开发服务器（含 QQ 授权码，严禁上传到线上静态资源）
+local-auth-server.js
+deploy.cmd
+node_modules
+*.log
+.DS_Store

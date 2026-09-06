@@ -1,0 +1,12 @@
+name = "scratchextensioneditor"
+compatibility_date = "2024-01-01"
+# 让 wrangler 读取本文件（含 [[kv_namespaces]] 绑定），否则会被忽略
+pages_build_output_dir = "."
+
+# Pages Functions 需要 KV 存储验证码（60s 限流 / 10min 过期 / 一次性票据）
+# id 取自已有的 namespace "scratchextensioneditor-AUTH_KV"
+#   npx wrangler kv namespace list
+# 注意：不要重复 kv namespace create，同名会报 already exists
+[[kv_namespaces]]
+binding = "AUTH_KV"
+id = "669f15cd7b66499fa5e8e5f6f8227b5c"

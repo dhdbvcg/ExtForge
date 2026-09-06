@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub 登录中…</title>
+  <style>
+    body { margin:0; display:flex; align-items:center; justify-content:center; height:100vh;
+      background:#0d1117; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+      font-size:15px; text-align:center; padding:0 24px; }
+    #msg { max-width:480px; line-height:1.7; }
+    .err { color:#f87171; }
+  </style>
+</head>
+<body>
+  <div id="msg">正在处理 GitHub 登录…</div>
+  <script>
+  (function () {
+    'use strict';
+    var msg = document.getElementById('msg');
+    function show(t, err) { msg.textContent = t; if (err) msg.className = 'err'; }
+
+    var params = new URLSearchParams(location.search);
+    var errParam = params.get('error');
+
+    if (errParam) {
+      show('GitHub 授权被拒绝（' + errParam + '），请关闭此页面重试。', true);
+      return;
+    }
+
+    // 转发到服务端回调函数（Cloudflare 边缘代为换 token + 拉资料）
+    // 传入 __redirect_uri 确保服务端换 token 时用的 redirect_uri 和 GitHub 授权时完全一致
+    var target = location.origin + '/api/github-callback' + location.search + '&__redirect_uri=' + encodeURIComponent(location.origin + location.pathname);
+    show('正在连接服务器…');
+
+    // 用 fetch 请求服务端函数（同源，无 CORS 问题），拿到它返回的完整 HTML
+    fetch(target, { credentials: 'same-origin', redirect: 'follow' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        // 服务端返回的 HTML 已包含：存 session + postMessage 给 opener + 关闭弹窗 的逻辑
+        // 我们直接把它写入当前页面执行即可
+        document.open();
+        document.write(html);
+        document.close();
+      })
+      .catch(function (e) {
+        show('GitHub 登录失败：' + (e && e.message ? e.message : '网络错误'), true);
+      });
+  })();
+  </script>
+</body>
+</html>

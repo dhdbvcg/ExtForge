@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>外观设置 — Scratch 扩展编辑器</title>
+<script>try{var t=localStorage.getItem('see-theme');if(!t)t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<style>
+  :root {
+    --bg: #070711; --bg-2: #0c0c1a; --bg-3: #111128; --bg-4: #181835;
+    --ink: #eef0fb; --ink-dim: #a6a8c4; --ink-faint: #6c6f93;
+    --violet: #8b5cf6; --cyan: #22d3ee; --pink: #f472b6;
+    --glass: rgba(255,255,255,0.04); --glass-brd: rgba(255,255,255,0.10);
+    --grad: linear-gradient(115deg, #8b5cf6 0%, #22d3ee 48%, #f472b6 100%);
+    --r-lg: 22px; --r-md: 16px; --r-sm: 11px; --r-xs: 6px;
+    --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    --sidebar-w: 260px; --header-h: 56px;
+  }
+  [data-theme="light"] {
+    --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #eceef6; --bg-4: #e2e4ee;
+    --ink: #1a1c2e; --ink-dim: #4a4d6b; --ink-faint: #8a8da8;
+    --glass: rgba(0,0,0,0.03); --glass-brd: rgba(0,0,0,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+
+  .hdr { position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); background: rgba(7,7,17,0.82); backdrop-filter: blur(18px) saturate(140%); border-bottom: 1px solid var(--glass-brd); z-index: 100; display: flex; align-items: center; padding: 0 24px; gap: 20px; }
+  [data-theme="light"] .hdr { background: rgba(244,245,251,0.85); }
+  .hdr-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .hdr-logo svg { width: 28px; height: 28px; flex-shrink: 0; }
+  .hdr-nav { display: flex; gap: 4px; margin-left: 12px; }
+  .hdr-nav a { color: var(--ink-dim); text-decoration: none; padding: 6px 14px; border-radius: var(--r-xs); font-size: 13.5px; transition: all .15s; }
+  .hdr-nav a:hover { color: var(--ink); background: var(--glass); }
+  .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .hdr-user { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; cursor: pointer; padding: 5px 10px; border-radius: var(--r-sm); background: var(--glass); }
+  .hdr-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+
+  .layout { display: flex; margin-top: var(--header-h); min-height: calc(100vh - var(--header-h)); }
+  .sidebar { width: var(--sidebar-w); flex-shrink: 0; border-right: 1px solid var(--glass-brd); background: var(--bg-2); position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); overflow-y: auto; padding: 24px 0; }
+  .sb-profile { padding: 0 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .sb-avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 28px; font-weight: 700; margin-bottom: 10px; flex-shrink: 0; }
+  .sb-name { font-weight: 700; font-size: 15px; }
+  .sb-handle { font-size: 12.5px; color: var(--ink-faint); }
+  .sb-sep { height: 1px; background: var(--glass-brd); margin: 14px 20px; }
+  .sb-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-faint); padding: 0 20px; margin-top: 16px; margin-bottom: 6px; font-weight: 600; }
+  .sb-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; color: var(--ink-dim); text-decoration: none; font-size: 13.5px; cursor: pointer; transition: all .15s; border-left: 3px solid transparent; }
+  .sb-item:hover { color: var(--ink); background: var(--glass); }
+  .sb-item.active { color: var(--violet); background: rgba(139,92,246,0.08); border-left-color: var(--violet); font-weight: 600; }
+  .sb-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75; }
+  .sb-item.active svg { opacity: 1; }
+
+  .main { flex: 1; padding: 32px 36px; max-width: 1000px; }
+  .page-title { font-size: 19px; font-weight: 700; display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .page-sub { font-size: 13px; color: var(--ink-faint); margin-bottom: 28px; }
+  .section-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+  .section-desc { font-size: 13px; color: var(--ink-faint); margin-bottom: 18px; }
+
+  .theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; max-width: 560px; }
+  .theme-card { border: 2px solid var(--glass-brd); border-radius: var(--r-md); padding: 18px; cursor: pointer; transition: all .15s; background: var(--bg-3); display: flex; flex-direction: column; gap: 12px; }
+  .theme-card:hover { border-color: var(--violet); }
+  .theme-card.active { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
+  .theme-card .tc-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+  .theme-card .tc-check { color: var(--violet); opacity: 0; }
+  .theme-card.active .tc-check { opacity: 1; }
+  .theme-preview { height: 64px; border-radius: var(--r-sm); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+  .theme-preview.dark { background: #070711; color: #eef0fb; }
+  .theme-preview.light { background: #f4f5fb; color: #1a1c2e; border: 1px solid rgba(0,0,0,0.08); }
+
+  .note { margin-top: 22px; font-size: 12.5px; color: var(--ink-faint); background: var(--glass); border: 1px solid var(--glass-brd); border-radius: var(--r-sm); padding: 12px 16px; max-width: 560px; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .hdr-nav { display: none; }
+    .theme-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="../index.html" class="hdr-logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="8" fill="url(#hl)"/><defs><linearGradient id="hl" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#8b5cf6"/><stop offset=".5" stop-color="#22d3ee"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs><path d="M8 10h12M8 14h8M8 18h5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+    Scratch 扩展编辑器
+  </a>
+  <nav class="hdr-nav"><a href="../index.html">首页</a><a href="./">用户</a></nav>
+  <div class="hdr-right">
+    <div class="hdr-user" id="hdrUser"><div class="hdr-avatar" id="hdrAvatar">?</div><span id="hdrName">未登录</span></div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-profile">
+      <div class="sb-avatar" id="sbAvatar">?</div>
+      <div class="sb-name" id="sbName">加载中...</div>
+      <div class="sb-handle" id="sbHandle">@—</div>
+    </div>
+    <div class="sb-sep"></div>
+    <div class="sb-label">个人资料</div>
+    <a class="sb-item" href="./">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      个人资料
+    </a>
+    <a class="sb-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 001.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      外观
+    </a>
+    <div class="sb-label">社交</div>
+    <a class="sb-item" href="./?user=demo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>好友 / 关注</a>
+    <div class="sb-label">账号</div>
+    <a class="sb-item" onclick="alert('开发中')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>安全</a>
+    <a class="sb-item" id="logoutBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>退出登录</a>
+  </aside>
+
+  <main class="main">
+    <h1 class="page-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 001.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      外观
+    </h1>
+    <p class="page-sub">自定义界面的明暗主题，设置会立即生效并保存在本设备。</p>
+
+    <div class="section-head">主题</div>
+    <p class="section-desc">选择你偏好的界面主题。</p>
+
+    <div class="theme-grid">
+      <div class="theme-card" id="themeDark" onclick="setTheme('dark')">
+        <div class="tc-name">深色 <span class="tc-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        <div class="theme-preview dark">深色主题</div>
+      </div>
+      <div class="theme-card" id="themeLight" onclick="setTheme('light')">
+        <div class="tc-name">浅色 <span class="tc-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        <div class="theme-preview light">浅色主题</div>
+      </div>
+    </div>
+
+    <div class="note">主题设置保存在浏览器 localStorage（键 <code>see-theme</code>），与网站其他页面、编辑器共享同一套明暗模式。</div>
+  </main>
+</div>
+
+<script src="../auth-web-v2.js"></script>
+<script>
+(function(){
+  const USERS_KEY = 'extbuilder_users';
+  const SESSION_KEY = 'extbuilder_session';
+  function getUsers(){ try{ return JSON.parse(localStorage.getItem(USERS_KEY)||'{}'); }catch(e){ return {}; } }
+  function getSession(){ try{ var r=JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); if(!r||!r.username)return null; if(r.expires&&r.expires<Date.now()){ localStorage.removeItem(SESSION_KEY); return null; } return r; }catch(e){ return null; } }
+
+  function applyActive(theme){
+    document.getElementById('themeDark').classList.toggle('active', theme==='dark');
+    document.getElementById('themeLight').classList.toggle('active', theme==='light');
+  }
+  window.setTheme = function(theme){
+    try { localStorage.setItem('see-theme', theme); } catch(e){}
+    document.documentElement.setAttribute('data-theme', theme);
+    applyActive(theme);
+  };
+
+  // Init
+  var cur = 'dark';
+  try { cur = localStorage.getItem('see-theme') || (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); } catch(e){}
+  applyActive(cur);
+
+  // Sidebar + header from session
+  var sess = getSession();
+  if (sess && sess.username) {
+    var u = getUsers()[sess.username] || {};
+    var dn = u.displayName || sess.username;
+    var letter = dn.charAt(0).toUpperCase();
+    document.getElementById('sbName').textContent = dn;
+    document.getElementById('sbAvatar').textContent = letter;
+    document.getElementById('sbHandle').textContent = '@' + sess.username;
+    document.getElementById('hdrName').textContent = dn;
+    document.getElementById('hdrAvatar').textContent = letter;
+  } else {
+    document.getElementById('sbName').textContent = '访客';
+    document.getElementById('sbHandle').textContent = '';
+    document.getElementById('hdrName').textContent = '未登录';
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', function(e){
+    e.preventDefault();
+    if (!confirm('确定要退出登录吗？')) return;
+    try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch(ex){}
+    location.href = '../index.html';
+  });
+})();
+</script>
+</body>
+</html>

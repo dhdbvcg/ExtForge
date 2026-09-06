@@ -333,6 +333,7 @@
     .reveal { opacity: 1; transform: none; }
     html { scroll-behavior: auto; }
   }
+
 </style>
 </head>
 <body>
@@ -954,5 +955,16 @@
   });
 })();
 </script>
+
+<!-- 认证模块（仅初始化，供 session-bridge 检测会话；登录入口已移至 /login/） -->
+<script src="auth-web-v2.js"></script>
+<script>
+if (window.AuthWeb) {
+  AuthWeb.init({
+    onLoginChange: function () {} // 网站首页不再显示登录状态，仅保持 session 活跃
+  });
+}
+</script>
+
 </body>
 </html>

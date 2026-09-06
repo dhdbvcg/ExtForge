@@ -14,7 +14,7 @@ import {
 } from '../lib/block-definitions.js';
 import {applyZhTranslations} from '../lib/scratch-blocks-zh.js';
 import {EXT_FORGE_RUNTIME, withUtilInjection} from '../lib/extforge-runtime.js';
-import {getSession, login, register, logout as authLogout, getUserMeta, savePrevSession, getPrevSession, clearPrevSession, switchToPrevSession} from '../lib/auth.js';
+import {getSession, login, register, logout as authLogout, getUserMeta, savePrevSession, getPrevSession, clearPrevSession, switchToPrevSession, sendEmailCode, verifyEmailCode, clearLocalAuthData, buildGitHubAuthUrl, loginWithGitHub, makeGitHubState, getRegisteredAccounts, switchToAccount, ensureSiteAccount} from '../lib/auth.js';
 import {
     listSaves, saveProject, deleteSave, exportSaveFile, parseSaveFileText,
     collectProjectState, restoreProjectState
@@ -312,13 +312,26 @@ const ExtensionBuilderInner = () => {
     const [authUser, setAuthUser] = useState('');
     const [authPass, setAuthPass] = useState('');
     const [authPass2, setAuthPass2] = useState('');
+    const [authEmail, setAuthEmail] = useState(''); // 注册用邮箱
     const [authError, setAuthError] = useState('');
     const [authBusy, setAuthBusy] = useState(false);
     const [authRemember, setAuthRemember] = useState(true); // 自动登录（记住我）默认开启
+    const [authCode, setAuthCode] = useState('');           // 邮箱验证码（注册用）
+    const [codeSending, setCodeSending] = useState(false);   // 发送验证码中
+    const [codeCountdown, setCodeCountdown] = useState(0);   // 重发倒计时（秒）
+    const [devCode, setDevCode] = useState('');               // 开发模式显示的验证码
+    const codeTimerRef = useRef(null);
     const [prevSession, setPrevSession] = useState(() => getPrevSession()); // 切换账号时记住的上一个会话
-    const [hcaptchaLoaded, setCaptchaLoaded] = useState(false); // hCaptcha JS 是否加载完成
-    const [hcaptchaWidgetId, setCaptchaWidgetId] = useState(null); // hCaptcha widget 实例 ID
-    const hcaptchaContainerRef = useRef(null); // hCaptcha 容器 DOM 引用
+    const [showAccountSwitcher, setShowAccountSwitcher] = useState(false); // 多账号切换子菜单
+    const [accountList, setAccountList] = useState(() => getRegisteredAccounts()); // 已注册账号列表
+    // ---- Cloudflare Turnstile 人机验证（注册模式） ----
+    const TURNSTILE_SITEKEY = '0x4AAAAAAEeqDjN4nAzMOE8q';
+    const [turnstileLoaded, setTurnstileLoaded] = useState(false);
+    const [turnstileWidgetId, setTurnstileWidgetId] = useState(null);
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const turnstileContainerRef = useRef(null);
+    // GitHub OAuth 弹窗流程：保存本次授权 state，用于回调消息校验（防 CSRF）
+    const githubStateRef = useRef('');
     const [showSavesPanel, setShowSavesPanel] = useState(false);
     const [savesList, setSavesList] = useState([]);
     const [saveNameInput, setSaveNameInput] = useState('');
@@ -2982,20 +2995,75 @@ const ExtensionBuilderInner = () => {
             .then(() => setFriendsBusy(false));
     }, [session, loadFriendsRelations]);
 
+    // 发送邮箱验证码（注册模式）
+    const handleSendCode = useCallback(() => {
+        const email = String(authEmail || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setAuthError('请输入正确的邮箱地址后再发送验证码');
+            return;
+        }
+        // 先通过人机验证才能发送验证码
+        if (!turnstileToken) {
+            setAuthError('请先完成人机验证（勾选「我是人类」）再获取验证码');
+            return;
+        }
+        if (codeSending || codeCountdown > 0) return;
+        setAuthError('');
+        setCodeSending(true);
+        sendEmailCode(email, 'register', turnstileToken)
+            .then((data) => {
+                // 发送失败（如 EmailJS 配置错误或网络问题）时抛错，不启动倒计时
+                if (data && data.success === false) {
+                    throw new Error(data.error || '验证码发送失败，请稍后重试');
+                }
+                setCodeCountdown(60); // 60 秒内不可重发
+                // 开发模式/EmailJS 失败回退：返回 devCode 字段，直接显示在页面上
+                if (data && data.result && data.result.devCode) {
+                    setDevCode(data.result.devCode);
+                }
+            })
+            .catch((err) => {
+                setAuthError(err && err.message ? err.message : '验证码发送失败，请稍后重试');
+            })
+            .then(() => {
+                setCodeSending(false);
+            });
+    }, [authEmail, turnstileToken, codeSending, codeCountdown]);
+
+    // 重发倒计时
+    useEffect(() => {
+        if (codeCountdown <= 0) return undefined;
+        codeTimerRef.current = setTimeout(() => setCodeCountdown(codeCountdown - 1), 1000);
+        return () => clearTimeout(codeTimerRef.current);
+    }, [codeCountdown]);
+
     const handleAuthSubmit = useCallback((e) => {
         e.preventDefault();
         setAuthError('');
         setAuthBusy(true);
-        // 获取 hCaptcha token（注册模式必须）
-        let captchaToken = null;
-        if (authMode === 'register' && hcaptchaWidgetId !== null) {
-            try {
-                captchaToken = window.hcaptcha.getResponse(hcaptchaWidgetId);
-            } catch (err) { /* hcaptcha 未加载 */ }
+        // 注册模式：先校验人机验证 + 邮箱 + 邮箱验证码
+        if (authMode === 'register') {
+            if (!turnstileToken) {
+                setAuthError('请先完成人机验证');
+                setAuthBusy(false);
+                return;
+            }
+            const email = String(authEmail || '').trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                setAuthError('请输入正确的邮箱地址');
+                setAuthBusy(false);
+                return;
+            }
+            if (!/^\d{6}$/.test(String(authCode || '').trim())) {
+                setAuthError('请输入 6 位邮箱验证码');
+                setAuthBusy(false);
+                return;
+            }
         }
         const doAuth = authMode === 'register'
             ? (authPass === authPass2
-                ? register(authUser, authPass, authRemember, captchaToken)
+                ? verifyEmailCode(String(authEmail).trim(), String(authCode).trim(), 'register')
+                    .then((verifiedToken) => register(authUser, authPass, authRemember, turnstileToken, String(authEmail).trim(), verifiedToken))
                 : Promise.reject(new Error('两次输入的密码不一致')))
             : login(authUser, authPass, authRemember);
         doAuth.then((s) => {
@@ -3004,20 +3072,24 @@ const ExtensionBuilderInner = () => {
             setAuthUser('');
             setAuthPass('');
             setAuthPass2('');
-            // 注册成功后重置 hCaptcha
-            if (authMode === 'register' && hcaptchaWidgetId !== null) {
-                try { window.hcaptcha.reset(hcaptchaWidgetId); } catch (err) { /* ignore */ }
+            setAuthEmail('');
+            setAuthCode('');
+            setTurnstileToken('');
+            // 注册成功后重置 Turnstile
+            if (authMode === 'register' && window.turnstile && turnstileWidgetId !== null) {
+                try { window.turnstile.reset(turnstileWidgetId); } catch (e) { /* ignore */ }
             }
         }).catch((err) => {
             setAuthError(err && err.message ? err.message : String(err));
-            // 验证失败时重置 hCaptcha 让用户重试
-            if (authMode === 'register' && hcaptchaWidgetId !== null) {
-                try { window.hcaptcha.reset(hcaptchaWidgetId); } catch (err) { /* ignore */ }
+            // 验证失败时重置 Turnstile 让用户重试
+            if (authMode === 'register' && window.turnstile && turnstileWidgetId !== null) {
+                try { window.turnstile.reset(turnstileWidgetId); } catch (e) { /* ignore */ }
             }
+            if (authMode === 'register') setTurnstileToken('');
         }).then(() => {
             setAuthBusy(false);
         });
-    }, [authMode, authUser, authPass, authPass2, authRemember, hcaptchaWidgetId]);
+    }, [authMode, authUser, authPass, authPass2, authEmail, authCode, authRemember, turnstileToken, turnstileWidgetId]);
 
     const handleLogout = useCallback(() => {
         // 切换账号前保存当前会话（支持一键切回）
@@ -3050,75 +3122,361 @@ const ExtensionBuilderInner = () => {
         }
     }, []);
 
-    // ---- hCaptcha 动态加载（仅注册模式） ----
+    // 多账号切换：切换到指定账号
+    const handleSwitchToAccount = useCallback((username) => {
+        if (!username || (session && username === session.username)) return;
+        const newSession = switchToAccount(username);
+        if (newSession) {
+            setSession(newSession);
+            setAccountList(getRegisteredAccounts()); // 刷新列表（虽然内容不变，保持一致）
+            setShowUserMenu(false);
+            setShowAccountSwitcher(false);
+        }
+    }, [session]);
+
+    // 用 GitHub 登录：打开授权弹窗，回调通过后由 postMessage 把用户资料送回（见下方 message 监听）
+    const handleGitHubLogin = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        // state 带 'g:' 前缀 + btoa(编辑器地址)：回调页据此回传 github-auth 给本窗口；
+        // 若 opener 不可用（浏览器 COOP / 弹窗拦截），回调页还会兜底跳回编辑器并把会话放在 URL hash 里
+        let state;
+        try {
+            state = 'g:' + btoa(window.location.origin + '/') + '~' + makeGitHubState();
+        } catch (e) {
+            state = makeGitHubState();
+        }
+        githubStateRef.current = state;
+        setAuthError('');
+        const url = buildGitHubAuthUrl(state);
+        let popup = null;
+        try {
+            popup = window.open(url, 'github-oauth', 'width=600,height=720');
+        } catch (e) {
+            popup = null;
+        }
+        if (!popup) {
+            setAuthError('浏览器拦截了登录弹窗，请允许本站弹出窗口后重试');
+        }
+    }, []);
+
+    // 监听 GitHub 回调弹窗回传的登录结果（防 CSRF：校验来源 + state）
+    useEffect(() => {
+        function onGitHubMessage(e) {
+            if (!e.data || e.data.type !== 'github-auth') return;
+            const ALLOWED = [
+                'https://scratchextensioneditor.cc.cd',
+                'https://scratchextensioneditor.pages.dev'
+            ];
+            if (ALLOWED.indexOf(e.origin) === -1) return;
+            if (e.data.state !== githubStateRef.current) {
+                setAuthError('GitHub 登录校验失败（state 不匹配）');
+                return;
+            }
+            if (e.data.error) {
+                setAuthError('GitHub 登录失败：' + e.data.error);
+                return;
+            }
+            loginWithGitHub(e.data.profile, authRemember)
+                .then((s) => {
+                    setSession(s);
+                    setShowAuthModal(false);
+                    setAuthUser(''); setAuthPass(''); setAuthPass2('');
+                    setAuthEmail(''); setAuthCode('');
+                    setTurnstileToken('');
+                })
+                .catch((err) => setAuthError(err && err.message ? err.message : String(err)));
+        }
+        if (typeof window !== 'undefined') {
+            window.addEventListener('message', onGitHubMessage);
+        }
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('message', onGitHubMessage);
+            }
+        };
+    }, [authRemember]);
+
+    // 接收来自 scratchextensioneditor.cc.cd 网站的登录会话（跨域：网站登录后 postMessage 给编辑器）
+    // 处理两种消息类型：
+    //   - site-session：网站首页/旧路径推送
+    //   - site-session-response：登录页 goHome() 通过 window.opener 直接推送 / session-bridge.html 桥接推送
+    useEffect(() => {
+        function onSiteSession(e) {
+            if (!e.data) return;
+            if (e.data.type !== 'site-session' && e.data.type !== 'site-session-response') return;
+            const ALLOWED = [
+                'https://scratchextensioneditor.cc.cd',
+                'https://scratchextensioneditor.pages.dev'
+            ];
+            // site-session-response 可能来自登录页（window.opener.postMessage），origin 就是网站 origin
+            // 也可能来自任何来源的 bridge iframe（sandbox 后 origin 变为网站 origin）
+            if (ALLOWED.indexOf(e.origin) === -1) return;
+            const payload = e.data;
+            if (!payload.session || !payload.session.username) return;
+            try {
+                const s = payload.session;
+                ensureSiteAccount(s.username); // 确保本地账号存在，刷新后 getSession 才能通过账号校验
+                localStorage.setItem('extbuilder_session', JSON.stringify(s));
+                setSession(s);
+                setUserPanelType(null);
+            } catch (err) {
+                console.warn('[Editor] 接收网站会话失败:', err);
+            }
+        }
+        if (typeof window !== 'undefined') {
+            window.addEventListener('message', onSiteSession);
+        }
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('message', onSiteSession);
+            }
+        };
+    }, []);
+
+    // 兜底通道：回调页在 opener 不可用（浏览器 COOP / 弹窗拦截）时，
+    // 会把会话编码进 URL 的 #gh= 里跳回本编辑器页面，这里读出来并登录。
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            const hash = window.location.hash || '';
+            if (!/(^|[#&])gh=/.test(hash)) return;
+            const params = new URLSearchParams(hash.replace(/^#/, ''));
+            const raw = params.get('gh');
+            if (!raw) return;
+            const s = JSON.parse(decodeURIComponent(raw));
+            if (!s || !s.username) return;
+            ensureSiteAccount(s.username); // 保证本地账号存在，刷新后 getSession 才能通过校验
+            localStorage.setItem('extbuilder_session', JSON.stringify(s));
+            setSession(s);
+            setUserPanelType(null);
+            setShowAuthModal(false);
+            // 立即清掉地址栏里的凭据，避免残留在历史/分享链接中
+            params.delete('gh');
+            const rest = params.toString();
+            window.history.replaceState(
+                null, '',
+                window.location.pathname + window.location.search + (rest ? '#' + rest : '')
+            );
+        } catch (err) {
+            console.warn('[Editor] 解析 URL 登录回传失败:', err);
+        }
+    }, []);
+
+    // 同源其他标签页写入会话时自动同步（storage 事件只在「其他」标签页触发，本页不触发）
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        function onStorage(e) {
+            if (e.key !== 'extbuilder_session') return;
+            try {
+                const s = e.newValue ? JSON.parse(e.newValue) : null;
+                if (s && s.username) {
+                    ensureSiteAccount(s.username);
+                    setSession(s);
+                } else {
+                    setSession(null);
+                }
+            } catch (err) { /* 忽略解析错误 */ }
+        }
+        window.addEventListener('storage', onStorage);
+        return () => {
+            window.removeEventListener('storage', onStorage);
+        };
+    }, []);
+
+    // 启动时通过隐藏 iframe 尝试拉取 scratchextensioneditor.cc.cd 的登录会话
+    // session-bridge.html 加载后主动 postMessage 回 session 数据，由上面的 onSiteSession 接收
+    useEffect(() => {
+        if (typeof window === 'undefined' || session) return; // 已有本地会话则不拉
+        var bridgeUrls = [
+            'https://scratchextensioneditor.cc.cd/session-bridge.html',
+            'https://scratchextensioneditor.pages.dev/session-bridge.html'
+        ];
+        var iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:none;';
+        iframe.sandbox = 'allow-scripts allow-same-origin';
+        var idx = 0;
+        function tryNext() {
+            if (idx >= bridgeUrls.length) {
+                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                return;
+            }
+            iframe.src = bridgeUrls[idx++];
+        }
+        function onBridgeResponse(e) {
+            if (!e.data || e.data.type !== 'site-session-response') return;
+            if (e.data.session && e.data.session.username) {
+                var s = e.data.session;
+                try {
+                    localStorage.setItem('extbuilder_session', JSON.stringify(s));
+                    setSession(s);
+                    setUserPanelType(null);
+                } catch (err) { /* ignore */ }
+            }
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            window.removeEventListener('message', onBridgeResponse);
+        }
+        window.addEventListener('message', onBridgeResponse);
+        iframe.onload = function () { };
+        document.body.appendChild(iframe);
+        tryNext();
+        setTimeout(function () {
+            window.removeEventListener('message', onBridgeResponse);
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 8000);
+        return () => {
+            window.removeEventListener('message', onBridgeResponse);
+            if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        };
+    }, [session]);
+
+    // 用户从网站登录页切回编辑器时，自动重新拉取网站会话（隐藏 iframe 桥接）
+    // 健壮性：单个域名 5s 无响应自动换备用域；同时监听 focus；未登录且标签页可见时重试若干次，
+    // 避免"一次性超时/网络抖动"导致同步不上（早前只试一次且 8s 才清理）。
+    useEffect(() => {
+        if (typeof window === 'undefined' || session) return;
+        var pulling = false;
+        var attempts = 0;
+
+        function pullSiteSession() {
+            if (pulling || getSession()) return;
+            if (attempts >= 15) return; // 约 90 秒后放弃，避免无限轮询
+            attempts += 1;
+            pulling = true;
+            var bridgeUrls = [
+                'https://scratchextensioneditor.cc.cd/session-bridge.html',
+                'https://scratchextensioneditor.pages.dev/session-bridge.html'
+            ];
+            var idx = 0;
+            var timer = null;
+            var iframe = document.createElement('iframe');
+            iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:none;';
+            iframe.sandbox = 'allow-scripts allow-same-origin';
+
+            function cleanup() {
+                pulling = false;
+                if (timer) { clearTimeout(timer); timer = null; }
+                window.removeEventListener('message', onBridgeResponse);
+                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            }
+            function tryNext() {
+                if (idx >= bridgeUrls.length) { cleanup(); return; }
+                iframe.src = bridgeUrls[idx++];
+                // 5 秒没回音就换下一个域名
+                timer = setTimeout(tryNext, 5000);
+            }
+            function onBridgeResponse(e) {
+                if (!e.data || e.data.type !== 'site-session-response') return;
+                if (e.data.session && e.data.session.username) {
+                    var s = e.data.session;
+                    try {
+                        ensureSiteAccount(s.username); // 确保本地账号存在，刷新后 getSession 才能通过账号校验
+                        localStorage.setItem('extbuilder_session', JSON.stringify(s));
+                        setSession(s);
+                        setUserPanelType(null);
+                    } catch (err) { /* ignore */ }
+                }
+                cleanup();
+            }
+            window.addEventListener('message', onBridgeResponse);
+            document.body.appendChild(iframe);
+            tryNext();
+        }
+
+        function onVisible() {
+            if (document.visibilityState === 'visible') pullSiteSession();
+        }
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onVisible);
+        // 切回来后若桥接还没返回（网络慢），补几次轮询
+        var poll = setInterval(pullSiteSession, 6000);
+        return () => {
+            clearInterval(poll);
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', onVisible);
+        };
+    }, [session]);
+
+    // 清除本地账号数据：清空本浏览器 localStorage / sessionStorage 中的账号注册表与会话
+    // （与线上账号清零配套的本地收口；云端残留账号需另行处理）
+    const handleClearLocalData = useCallback(() => {
+        if (typeof window !== 'undefined' && window.confirm) {
+            const ok = window.confirm(
+                '确定要清除本地的所有账号数据吗？\n\n' +
+                '将删除：本地账号注册表、当前登录会话、切换账号记录。\n' +
+                '此操作不可恢复，但不会删除你在服务器上的账号。'
+            );
+            if (!ok) return;
+        }
+        clearLocalAuthData();
+        setSession(null);
+        setPrevSession(null);
+        setShowUserMenu(false);
+        setUserPanelType(null);
+        setAuthError('');
+    }, []);
+
+    // ---- Cloudflare Turnstile：注册模式打开时加载 SDK 并渲染 widget ----
     useEffect(() => {
         if (!showAuthModal || authMode !== 'register') return;
         let mounted = true;
         let retryTimer = null;
 
-        const SITEKEY = 'b272a274-3bee-4e2e-92cc-ed16bf1a2584';
-
-        // 尝试渲染 widget（带重试）
         const tryRender = (attempt) => {
             if (!mounted) return;
-            const el = hcaptchaContainerRef.current || document.getElementById('ext-hcaptcha-container');
+            const el = turnstileContainerRef.current || document.getElementById('ext-turnstile-container');
             if (!el) {
-                if (attempt < 10) {
-                    retryTimer = setTimeout(() => tryRender(attempt + 1), 100);
-                } else {
-                    console.warn('[hCaptcha] 容器未找到，已重试 10 次');
-                }
-                return;
-            }
-            if (!window.hcaptcha) {
-                console.warn('[hCaptcha] SDK 未加载');
-                return;
-            }
-            // 如果已有 widget 且容器有子节点，跳过
-            if (el.hasChildNodes() && hcaptchaWidgetId !== null) return;
-            try {
-                const wid = window.hcaptcha.render(el, {
-                    sitekey: SITEKEY,
-                    theme: 'light',
-                    size: 'normal',
-                    'hl': 'zh-cn'
-                });
-                if (mounted) setCaptchaWidgetId(wid);
-                console.log('[hCaptcha] widget 渲染成功, id=', wid);
-            } catch (err) {
-                console.error('[hCaptcha] render 失败:', err);
-                // 某些情况下需要等一帧再试
-                if (attempt < 5) {
+                if (attempt < 20) {
                     retryTimer = setTimeout(() => tryRender(attempt + 1), 200);
                 }
+                return;
+            }
+            if (!window.turnstile) {
+                if (attempt < 30) {
+                    retryTimer = setTimeout(() => tryRender(attempt + 1), 300);
+                } else {
+                    console.warn('[Turnstile] SDK 未加载');
+                }
+                return;
+            }
+            if (el.hasChildNodes() && turnstileWidgetId !== null) return;
+            try {
+                const wid = window.turnstile.render(el, {
+                    sitekey: TURNSTILE_SITEKEY,
+                    theme: 'light',
+                    callback: (token) => { if (mounted) setTurnstileToken(token); },
+                    'expired-callback': () => { if (mounted) setTurnstileToken(''); },
+                    'error-callback': () => { if (mounted) setTurnstileToken(''); }
+                });
+                if (mounted) setTurnstileWidgetId(wid);
+            } catch (err) {
+                console.error('[Turnstile] render 失败:', err);
+                if (attempt < 10) retryTimer = setTimeout(() => tryRender(attempt + 1), 300);
             }
         };
 
-        // 加载 hCaptcha JS SDK（如果还没加载）
-        if (!window.hcaptcha) {
+        if (!window.turnstile) {
             const script = document.createElement('script');
-            script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit&hl=zh-cn';
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&hl=zh-cn';
             script.async = true;
             script.onload = () => {
                 if (!mounted) return;
-                console.log('[hCaptcha] JS SDK 加载完成');
-                setCaptchaLoaded(true);
-                // 延迟 200ms 确保容器 DOM 已 commit
-                setTimeout(() => tryRender(0), 200);
+                setTurnstileLoaded(true);
+                tryRender(0);
             };
-            script.onerror = (e) => {
-                console.error('[hCaptcha] JS SDK 加载失败:', e);
-            };
+            script.onerror = (e) => console.error('[Turnstile] SDK 加载失败:', e);
             document.head.appendChild(script);
         } else {
-            // SDK 已存在，直接尝试渲染
-            setCaptchaLoaded(true);
-            setTimeout(() => tryRender(0), 100);
+            setTurnstileLoaded(true);
+            tryRender(0);
         }
 
         return () => {
             mounted = false;
             if (retryTimer) clearTimeout(retryTimer);
+            if (window.turnstile && turnstileWidgetId !== null) {
+                try { window.turnstile.remove(turnstileWidgetId); } catch (e) { /* ignore */ }
+            }
+            if (mounted) { setTurnstileWidgetId(null); setTurnstileToken(''); }
         };
     }, [showAuthModal, authMode]);
 
@@ -3412,20 +3770,10 @@ const ExtensionBuilderInner = () => {
                     </div>
                     {!session ? (
                         <React.Fragment>
-                            {prevSession && (
-                                <button
-                                    className="ext-menu-btn ext-menu-btn-switch"
-                                    onClick={handleSwitchBack}
-                                    title={'切回上一个账号（' + prevSession.username + '）'}
-                                >
-                                    <span className="ext-menu-btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H13"/></svg></span>
-                                    <span className="ext-menu-btn-label">切回</span>
-                                </button>
-                            )}
                             <button
                                 className="ext-menu-btn"
-                                onClick={() => { setAuthMode('login'); setAuthError(''); setShowAuthModal(true); }}
-                                title="登录 / 注册"
+                                onClick={() => { var r = encodeURIComponent(window.location.href); window.open('https://scratchextensioneditor.cc.cd/login?return=' + r, '_blank'); }}
+                                title="前往网站登录，登录后回到本编辑器即可自动同步"
                             >
                                 <span className="ext-menu-btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
                                 <span className="ext-menu-btn-label">登录</span>
@@ -3440,7 +3788,7 @@ const ExtensionBuilderInner = () => {
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{session.username} ▼</button>
                             {showUserMenu && (
                                 <div className="ext-user-menu">
-                                    <button className="ext-user-menu-item" onClick={() => { setShowUserMenu(false); handleOpenProfile(); }}>
+                                    <button className="ext-user-menu-item" onClick={() => { setShowUserMenu(false); window.open('https://scratchextensioneditor.cc.cd/users', '_blank'); }}>
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                                         个人主页
                                     </button>
@@ -3453,9 +3801,9 @@ const ExtensionBuilderInner = () => {
                                         好友 / 关注
                                     </button>
                                     <div className="ext-user-menu-divider"></div>
-                                    <button className="ext-user-menu-item" onClick={() => { setShowUserMenu(false); handleSwitchAccount(); }}>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><polyline points="17,1 21,5 17,9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7,23 3,19 7,15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-                                        切换账号
+                                    <button className="ext-user-menu-item ext-user-menu-danger" onClick={() => { setShowUserMenu(false); handleClearLocalData(); }}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d32f2f" strokeWidth="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                        清除本地账号数据
                                     </button>
                                     <button className="ext-user-menu-item ext-user-menu-logout" onClick={() => { setShowUserMenu(false); handleLogout(); }}>
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d32f2f" strokeWidth="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -4425,13 +4773,52 @@ const ExtensionBuilderInner = () => {
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                         </div>
                         <form className="ext-auth-form" onSubmit={handleAuthSubmit}>
+                                {authMode === 'register' && (
+                                    <React.Fragment>
+                                        <label className="ext-auth-label">邮箱</label>
+                                        <input
+                                            className="ext-auth-input"
+                                            type="email"
+                                            value={authEmail}
+                                            onChange={(e) => setAuthEmail(e.target.value)}
+                                            placeholder="输入邮箱地址"
+                                            autoFocus
+                                        />
+                                        <label className="ext-auth-label">邮箱验证码</label>
+                                        <div className="ext-auth-code-row">
+                                            <input
+                                                className="ext-auth-input ext-auth-code-input"
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={6}
+                                                value={authCode}
+                                                onChange={(e) => setAuthCode(e.target.value.replace(/\D/g, ''))}
+                                                placeholder="请输入 6 位验证码"
+                                                autoComplete="one-time-code"
+                                            />
+                                            <button
+                                                type="button"
+                                                className="ext-auth-code-btn"
+                                                onClick={handleSendCode}
+                                                disabled={codeSending || codeCountdown > 0}
+                                            >
+                                                {codeSending ? '发送中…' : (codeCountdown > 0 ? `${codeCountdown}秒后重发` : '发送验证码')}
+                                            </button>
+                                        </div>
+                                        {devCode && (
+                                            <div style={{fontSize:12, color:'#059669', marginTop:2, fontWeight:600}}>
+                                                验证码（调试用）：{devCode}
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                )}
                                 <label className="ext-auth-label">用户名</label>
                                 <input
                                     className="ext-auth-input"
                                     value={authUser}
                                     onChange={(e) => setAuthUser(e.target.value)}
                                     placeholder="输入用户名"
-                                    autoFocus
+                                    autoFocus={authMode !== 'register'}
                                 />
                                 <label className="ext-auth-label">密码</label>
                                 <input
@@ -4451,8 +4838,8 @@ const ExtensionBuilderInner = () => {
                                             onChange={(e) => setAuthPass2(e.target.value)}
                                             placeholder="再次输入密码"
                                         />
-                                        {/* hCaptcha 人机验证 */}
-                                        <div id="ext-hcaptcha-container" className="ext-hcaptcha-container" ref={hcaptchaContainerRef}></div>
+                                        {/* Cloudflare Turnstile 人机验证 */}
+                                        <div id="ext-turnstile-container" className="ext-turnstile-container" ref={turnstileContainerRef}></div>
                                     </React.Fragment>
                                 )}
                                 {authError && <div className="ext-auth-error">{authError}</div>}
@@ -4466,6 +4853,17 @@ const ExtensionBuilderInner = () => {
                                 </label>
                                 <button className="ext-auth-btn" type="submit" disabled={authBusy}>
                                     {authBusy ? '请稍候…' : (authMode === 'login' ? '登录' : '注册并登录')}
+                                </button>
+                                <div className="ext-auth-divider"><span>或</span></div>
+                                <button
+                                    type="button"
+                                    className="ext-auth-github-btn"
+                                    onClick={handleGitHubLogin}
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{verticalAlign:'middle',marginRight:'8px'}}>
+                                        <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/>
+                                    </svg>
+                                    使用 GitHub 登录
                                 </button>
                                 <button
                                     type="button"

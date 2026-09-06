@@ -11,7 +11,7 @@
     "build:dir": "electron-builder --win --dir"
   },
   "build": {
-    "appId": "com.bilup.editor",
+    "appId": "com.scratchextensioneditor.editor",
     "productName": "scratch-extension-editor",
     "directories": {
       "output": "dist"

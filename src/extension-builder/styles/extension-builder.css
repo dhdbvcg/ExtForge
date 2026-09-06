@@ -1589,10 +1589,86 @@
 :global(.ext-user-menu-logout:hover) {
     background: #ffebee;
 }
+:global(.ext-user-menu-danger) {
+    color: #d32f2f;
+}
+:global(.ext-user-menu-danger:hover) {
+    background: #ffebee;
+}
 :global(.ext-user-menu-divider) {
     height: 1px;
     background: #eee;
     margin: 4px 10px;
+}
+
+/* ── 多账号切换子菜单 ── */
+:global(.ext-account-switcher-list) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0;
+    max-height: 220px;
+    overflow-y: auto;
+}
+:global(.ext-account-switcher-item) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: #333;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: background .12s;
+}
+:global(.ext-account-switcher-item:hover) {
+    background: #f0f4ff;
+}
+:global(.ext-account-switcher-current) {
+    background: #e8f0fe;
+    color: #1a56db;
+    font-weight: 600;
+}
+:global(.ext-account-switcher-current:hover) {
+    background: #d2e3fc;
+}
+:global(.ext-account-switcher-name) {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+:global(.ext-account-switcher-badge) {
+    font-size: 10px;
+    color: #1a56db;
+    background: #c5d6fd;
+    padding: 1px 6px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    font-weight: 600;
+}
+:global(.ext-account-switcher-uid) {
+    font-size: 11px;
+    color: #888;
+    background: #f0f0f0;
+    padding: 1px 7px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+:global(.ext-account-switcher-current) :global(.ext-account-switcher-uid) {
+    color: #1a56db;
+    background: #d4e2fb;
+}
+:global(.ext-account-switcher-empty) {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
 }
 
 /* ── 工具下拉菜单 ── */
@@ -2245,6 +2321,40 @@
     padding: 6px 8px;
 }
 
+/* 邮箱验证码行（输入 + 发送按钮） */
+:global(.ext-auth-code-row) {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 2px;
+}
+:global(.ext-auth-code-input) {
+    flex: 1;
+    min-width: 0;
+}
+:global(.ext-auth-code-btn) {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 0 14px;
+    height: 36px;
+    border: 1px solid #4c97ff;
+    background: #4c97ff;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+:global(.ext-auth-code-btn:hover:not(:disabled)) {
+    background: #3d83e0;
+    border-color: #3d83e0;
+}
+:global(.ext-auth-code-btn:disabled) {
+    background: #b8c6e0;
+    border-color: #b8c6e0;
+    cursor: not-allowed;
+}
+
 :global(.ext-auth-switch) {
     background: transparent;
     border: none;
@@ -2258,14 +2368,53 @@
     text-decoration: underline;
 }
 
-/* hCaptcha 人机验证容器（注册表单内） */
-:global(.ext-hcaptcha-container) {
+/* GitHub 登录分隔线 + 按钮 */
+:global(.ext-auth-divider) {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #9aa0a6;
+    font-size: 12px;
+    margin: 12px 0 4px;
+}
+:global(.ext-auth-divider)::before,
+:global(.ext-auth-divider)::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e3e3e3;
+}
+:global(.ext-auth-divider) span {
+    padding: 0 10px;
+}
+:global(.ext-auth-github-btn) {
+    width: 100%;
+    margin-top: 6px;
+    padding: 9px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #24292f;
+    color: #fff;
+    border: 1px solid #24292f;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+:global(.ext-auth-github-btn:hover) {
+    background: #32383f;
+    border-color: #32383f;
+}
+
+/* Cloudflare Turnstile 人机验证容器（注册表单内） */
+:global(.ext-turnstile-container) {
     margin-top: 4px;
-    min-height: 78px;
+    min-height: 65px;
     display: flex;
     align-items: flex-start;
 }
-:global(.ext-hcaptcha-container > div) {
+:global(.ext-turnstile-container > div) {
     transform: scale(0.95);
     transform-origin: left top;
 }

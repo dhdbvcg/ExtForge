@@ -69,6 +69,31 @@ export default {
 
 完整文档见独立页面 **ext-addons-doc.html**（编辑器内「开发教程」按钮直达，或访问 `http://localhost:8601/ext-addons-doc.html`）。
 
+## 🎤 AI 面板语音输入（SenseVoiceSmall）
+
+AI 面板输入框旁的 🎤 按钮提供**完全本地**的语音转文字（浏览器录音 → 本机解码，音频不出机器）：
+
+- 录音：16 kHz 单声道 PCM（`voice-input.js`）
+- 解码：webpack-dev-server 内置 `/voice-api/*` 路由（`voice-decode.js`），基于 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) WASM + [SenseVoiceSmall](https://github.com/FunAudioLLM/SenseVoice) int8 模型（支持中/英/日/韩/粤，ITN 数字归一化 + 标点）
+- 实测：5.6 s 音频约 3.7 s 解码；中文测试句识别与官方 ground truth 一致
+
+运行时与模型**不随仓库分发**（约 240 MB），需一次性下载到本地：
+
+```powershell
+# 1) sherpa-onnx 运行时（npmmirror，约 15 MB）
+mkdir voice-runtime
+Invoke-WebRequest https://registry.npmmirror.com/sherpa-onnx/-/sherpa-onnx-1.13.8.tgz -OutFile voice-runtime\s.tgz
+tar -xzf voice-runtime\s.tgz -C voice-runtime   # 解出 voice-runtime/package/
+
+# 2) SenseVoiceSmall int8 模型（GitHub Releases，约 230 MB）
+mkdir voice-models voice\model
+Invoke-WebRequest https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -OutFile voice-models\m.tar.bz2
+tar -xjf voice-models\m.tar.bz2 -C voice-models
+Copy-Item voice-models\sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17\{model.int8.onnx,tokens.txt} voice\model\
+```
+
+重启 `npm start` 后，接口自检：`GET http://localhost:8601/voice-api/status` 应返回 `{"runtime":true,"model":true,...}`。端到端测试：`node voice-test.js`。
+
 ## ⚖️ 版权与致谢
 
 - 本项目基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui)（GPL-3.0）二次开发，`LICENSE` 文件保留其原始许可证

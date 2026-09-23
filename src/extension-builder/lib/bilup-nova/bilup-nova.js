@@ -209,7 +209,7 @@ function createWindowManager() {
             top: y + 'px',
             width: width + 'px',
             height: height + 'px',
-            zIndex: String(++zCounter),
+            zIndex: '1000000',
             display: 'flex',
             flexDirection: 'column',
             background: '#ffffff',
@@ -217,6 +217,11 @@ function createWindowManager() {
             borderRadius: '10px',
             overflow: 'hidden',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        });
+
+        // 点击本窗口任意位置 → 调用 React 统一层级系统置顶（与其它悬浮框同一套管理）
+        root.addEventListener('mousedown', () => {
+            if (typeof window.__extBringToFront === 'function') window.__extBringToFront('nova');
         });
 
         const titleBar = document.createElement('div');
@@ -327,10 +332,16 @@ function createWindowManager() {
                 if (!root.parentNode) document.body.appendChild(root);
                 root.style.display = 'flex';
                 instance.isVisible = true;
+                // 打开/显示时自动置顶（统一走 React 层级系统）
+                if (typeof window.__extBringToFront === 'function') window.__extBringToFront('nova');
                 return instance;
             },
             bringToFront() {
-                root.style.zIndex = String(++zCounter);
+                if (typeof window.__extBringToFront === 'function') {
+                    window.__extBringToFront('nova');
+                } else {
+                    root.style.zIndex = String(++zCounter);
+                }
             },
             hide() {
                 root.style.display = 'none';

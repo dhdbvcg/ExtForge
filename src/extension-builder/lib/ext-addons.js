@@ -28,17 +28,28 @@
 import realtimeCollab from './builtin/realtime-collab.js';
 // Bilup Nova（novatheai）：从原版搬运移植的 AI 助手插件（悬浮聊天框 / 多模型 / 设置 / Agent / 会话）
 import bilupNova from './bilup-nova/bilup-nova.js';
+// 以下插件已从外部仓库迁移回内置
+import blockDuplicate from './builtin/block-duplicate.js';
+import zebraStriping from './builtin/zebra-striping.js';
+import editorSquareInputs from './builtin/editor-square-inputs.js';
+import editorNumberArrowKeys from './builtin/editor-number-arrow-keys.js';
+import transparentOrphans from './builtin/transparent-orphans.js';
+import developerTools from './builtin/developer-tools.js';
 
 const STORAGE_KEY = 'extbuilder_ext_addons';
-
-// 已迁移到 github:dhdbvcg/scratch-ext-addon 的内置插件（仅作旧状态兼容，不再注入）
-const MIGRATED_BUILTIN = ['block-duplicate', 'zebra-striping', 'editor-square-inputs', 'editor-number-arrow-keys', 'transparent-orphans', 'developer-tools'];
 
 const DEFAULT_STATE = {
     // 内置实时协作：默认开启
     'realtime-collab': true,
     // Bilup Nova（AI 助手）：从原版搬运移植，默认开启
     'bilup-nova': true,
+    // 已迁移回内置的插件：默认开启
+    'block-duplicate': true,
+    'zebra-striping': true,
+    'editor-square-inputs': true,
+    'editor-number-arrow-keys': true,
+    'transparent-orphans': true,
+    'developer-tools': true,
 };
 
 /**
@@ -57,12 +68,22 @@ export const EXT_ADDONS = [
     Object.assign({}, realtimeCollab, { builtin: true }),
     // Bilup Nova（AI 助手）：内置插件（不可卸载；可在插件管理里取消勾选 / 重新勾选）
     Object.assign({}, bilupNova, { builtin: true }),
+    // 快速复制积木：按住 Alt/⌥ 拖动直接复制一份
+    Object.assign({}, blockDuplicate, { builtin: true }),
+    // 斑马条纹积木：嵌套相同颜色积木交替明暗显示
+    Object.assign({}, zebraStriping, { builtin: true }),
+    // 方形数字输入框：数字/文本输入框从圆形变为方形
+    Object.assign({}, editorSquareInputs, { builtin: true }),
+    // 数字框 ↑↓ 微调：聚焦数字输入框时按 ↑/↓ 键快速增减数值
+    Object.assign({}, editorNumberArrowKeys, { builtin: true }),
+    // 孤立积木半透明：顶部不是帽子积木的孤立积木变淡显示
+    Object.assign({}, transparentOrphans, { builtin: true }),
+    // 更多右键菜单栏：右键积木新增全部复制/复制积木/剪切积木
+    Object.assign({}, developerTools, { builtin: true }),
 ];
 
-/** 提示文案：内置插件已迁移到外部仓库 */
-export const EXT_ADDONS_MIGRATION_NOTE =
-    '内置插件已迁移到 GitHub 仓库 scratch-ext-addon，可在「安装插件」中输入 ' +
-    'github:dhdbvcg/scratch-ext-addon 重新安装。';
+/** 提示文案：内置插件已迁移到外部仓库（已废弃，所有插件已迁回内置） */
+export const EXT_ADDONS_MIGRATION_NOTE = '';
 
 
 

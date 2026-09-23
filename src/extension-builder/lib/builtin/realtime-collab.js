@@ -712,12 +712,17 @@ export default {
                 // 保存当前位置尺寸
                 const rect = panel.getBoundingClientRect();
                 savedBounds = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-                // 最大化：撑满屏幕（留边距）
-                panel.style.top = '8px';
-                panel.style.left = '8px';
-                panel.style.right = '8px';
-                panel.style.width = '';
-                panel.style.height = 'calc(100vh - 16px)';
+                // 最大化：撑满屏幕（无间距）
+                panel.style.top = '0';
+                panel.style.left = '0';
+                panel.style.right = '0';
+                panel.style.bottom = '0';
+                panel.style.width = '100vw';
+                panel.style.height = '100vh';
+                panel.style.maxHeight = 'none';
+                panel.style.minWidth = '0';
+                panel.style.minHeight = '0';
+                panel.style.borderRadius = '0';
                 panel.style.transform = 'none';
                 isMaximized = true;
             } else {
@@ -726,8 +731,13 @@ export default {
                     panel.style.top = savedBounds.top + 'px';
                     panel.style.left = savedBounds.left + 'px';
                     panel.style.right = 'auto';
+                    panel.style.bottom = 'auto';
                     panel.style.width = savedBounds.width + 'px';
                     panel.style.height = savedBounds.height + 'px';
+                    panel.style.maxHeight = '';
+                    panel.style.minWidth = '';
+                    panel.style.minHeight = '';
+                    panel.style.borderRadius = '';
                     panel.style.transform = 'none';
                 }
                 isMaximized = false;
@@ -1880,7 +1890,13 @@ export default {
 
         // 挂载面板到 DOM（初始隐藏）
         panel.style.display = 'none';
+        panel.style.zIndex = '1000000'; // 对齐 React 层级系统基准值
         document.body.appendChild(panel);
+
+        // 点击/拖动实时协面板时，调用 React 层级系统置顶（与其它悬浮框统一管理）
+        panel.addEventListener('mousedown', () => {
+            if (typeof window.__extBringToFront === 'function') window.__extBringToFront('rtc');
+        });
 
         // 全局拖拽 / 拉伸事件
         document.addEventListener('mousemove', onDrag);

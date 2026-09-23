@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>邮箱验证码 · scratch扩展编辑器</title>
+</head>
+<body style="margin:0;background:#f4f6f8;font-family:'Microsoft YaHei UI',sans-serif">
+  <h2 style="text-align:center;color:#2E7D32;margin-top:32px">邮箱验证码演示</h2>
+  <p style="text-align:center;color:#757575;font-size:13px">注册验证 · 登录 OTP · 找回密码（密码均经服务端 PBKDF2 哈希）</p>
+
+  <div id="email-auth"></div>
+
+  <script src="email-auth.js"></script>
+  <script>
+    EmailAuth.mount('#email-auth');
+    // 登录成功后回调（可在这里同步到现有账号面板）
+    EmailAuth.onLogin = function (data) {
+      console.log('已登录：', data.email, data.token);
+    };
+  </script>
+</body>
+</html>

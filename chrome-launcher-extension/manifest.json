@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "扩展编辑器启动器",
+  "version": "1.0",
+  "description": "浏览器启动时自动打开扩展编辑器 (http://127.0.0.1:8601)",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [],
+  "chrome_url_overrides": {}
+}

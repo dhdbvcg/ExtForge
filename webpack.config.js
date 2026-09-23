@@ -32,11 +32,69 @@ const base = {
     mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
     devtool: process.env.SOURCEMAP || (process.env.NODE_ENV === 'production' ? false : 'cheap-module-source-map'),
     devServer: {
-        contentBase: path.resolve(__dirname, 'build'),
+        // build：页面产物；voice：语音识别运行时 + SenseVoice 模型（大文件直接静态服务，不进 webpack 编译）
+        contentBase: [path.resolve(__dirname, 'build'), path.resolve(__dirname, 'voice')],
         host: '0.0.0.0',
         disableHostCheck: true,
         compress: true,
         port: process.env.PORT || 8601,
+        // 语音识别 API（SenseVoiceSmall，Node 侧本地解码，同源免 CORS）
+        before(app) {
+            const voiceDecode = require('./voice-decode');
+            const MAX_PCM_BYTES = 32 * 1024 * 1024; // ≈ 16 分钟 @16kHz Int16
+
+            app.get('/voice-api/status', (req, res) => {
+                try {
+                    res.json(voiceDecode.getStatus());
+                } catch (e) {
+                    res.status(500).json({error: String(e && e.message || e)});
+                }
+            });
+
+            // 预热：提前加载模型（首次解码不再卡）
+            app.get('/voice-api/warmup', async (req, res) => {
+                try {
+                    await voiceDecode.ensureRecognizer();
+                    res.json({ok: true, ...voiceDecode.getStatus()});
+                } catch (e) {
+                    res.status(500).json({error: String(e && e.message || e)});
+                }
+            });
+
+            app.post('/voice-api/decode', (req, res) => {
+                const rate = parseInt(req.query.rate, 10) || 16000;
+                const chunks = [];
+                let size = 0;
+                let aborted = false;
+                req.on('data', (c) => {
+                    if (aborted) return;
+                    size += c.length;
+                    if (size > MAX_PCM_BYTES) {
+                        aborted = true;
+                        res.status(413).json({error: 'PCM too large'});
+                        req.destroy();
+                        return;
+                    }
+                    chunks.push(c);
+                });
+                req.on('error', () => { aborted = true; });
+                req.on('end', async () => {
+                    if (aborted) return;
+                    try {
+                        const buf = Buffer.concat(chunks);
+                        if (buf.length < 32000) { // < 1s @16k
+                            res.status(400).json({error: 'audio too short'});
+                            return;
+                        }
+                        const t0 = Date.now();
+                        const result = await voiceDecode.decodeInt16Buffer(buf, rate);
+                        res.json({ok: true, ms: Date.now() - t0, ...result});
+                    } catch (e) {
+                        res.status(500).json({error: String(e && e.message || e)});
+                    }
+                });
+            });
+        },
         // allows ROUTING_STYLE=wildcard to work properly
         historyApiFallback: {
             rewrites: []

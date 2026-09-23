@@ -39,3 +39,21 @@ npm-*
 !/build/main.js
 !/build/package.json
 !/build/installer.nsh
+
+# ── 开源发布前的保密/大文件规则 ──
+
+# 明文凭据（绝不提交）
+/apikey.md
+
+# 语音识别运行时与 SenseVoice 模型（体积大，按 README「语音输入」章节自行获取）
+/voice
+/voice-models
+/voice-runtime
+
+# 本地日志 / 缓存 / 构建产物 / 系统垃圾
+/.dev-server.log
+/.wrangler
+/build-release.zip
+/installer_out
+/nul
+Thumbs.db

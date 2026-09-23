@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>搜索用户 — Scratch 扩展编辑器</title>
+<script>try{var t=localStorage.getItem('see-theme');if(!t)t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<style>
+  :root {
+    --bg: #070711; --bg-2: #0c0c1a; --bg-3: #111128; --bg-4: #181835;
+    --ink: #eef0fb; --ink-dim: #a6a8c4; --ink-faint: #6c6f93;
+    --violet: #8b5cf6; --cyan: #22d3ee; --pink: #f472b6; --green: #34d399;
+    --glass: rgba(255,255,255,0.04); --glass-brd: rgba(255,255,255,0.10);
+    --grad: linear-gradient(115deg, #8b5cf6 0%, #22d3ee 48%, #f472b6 100%);
+    --r-lg: 22px; --r-md: 16px; --r-sm: 11px; --r-xs: 6px;
+    --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", Consolas, monospace;
+    --sidebar-w: 260px;
+    --header-h: 56px;
+  }
+  [data-theme="light"] {
+    --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #eceef6; --bg-4: #e2e4ee;
+    --ink: #1a1c2e; --ink-dim: #4a4d6b; --ink-faint: #8a8da8;
+    --glass: rgba(0,0,0,0.03); --glass-brd: rgba(0,0,0,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); min-height: 100vh; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+
+  .hdr { position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); background: rgba(7,7,17,0.82); backdrop-filter: blur(18px) saturate(140%); border-bottom: 1px solid var(--glass-brd); z-index: 100; display: flex; align-items: center; padding: 0 24px; gap: 20px; }
+  [data-theme="light"] .hdr { background: rgba(244,245,251,0.85); }
+  .hdr-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .hdr-logo svg { width: 28px; height: 28px; flex-shrink: 0; }
+  .hdr-nav { display: flex; gap: 4px; margin-left: 12px; }
+  .hdr-nav a { color: var(--ink-dim); text-decoration: none; padding: 6px 14px; border-radius: var(--r-xs); font-size: 13.5px; transition: all .15s; }
+  .hdr-nav a:hover { color: var(--ink); background: var(--glass); }
+  .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .hdr-user { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; cursor: pointer; padding: 5px 10px; border-radius: var(--r-sm); border: 1px solid transparent; transition: all .15s; background: var(--glass); }
+  .hdr-user:hover { border-color: var(--glass-brd); }
+  .hdr-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+
+  .layout { display: flex; margin-top: var(--header-h); min-height: calc(100vh - var(--header-h)); }
+  .sidebar { width: var(--sidebar-w); flex-shrink: 0; border-right: 1px solid var(--glass-brd); background: var(--bg-2); position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); overflow-y: auto; padding: 24px 0; }
+  .sb-profile { padding: 0 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .sb-avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 28px; font-weight: 700; margin-bottom: 10px; flex-shrink: 0; }
+  .sb-name { font-weight: 700; font-size: 15px; color: var(--ink); }
+  .sb-handle { font-size: 12.5px; color: var(--ink-faint); }
+  .sb-sep { height: 1px; background: var(--glass-brd); margin: 14px 20px; }
+  .sb-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-faint); padding: 0 20px; margin-top: 16px; margin-bottom: 6px; font-weight: 600; }
+  .sb-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; color: var(--ink-dim); text-decoration: none; font-size: 13.5px; cursor: pointer; transition: all .15s; border-left: 3px solid transparent; }
+  .sb-item:hover { color: var(--ink); background: var(--glass); }
+  .sb-item.active { color: var(--violet); background: rgba(139,92,246,0.08); border-left-color: var(--violet); font-weight: 600; }
+  .sb-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75; }
+  .sb-item.active svg { opacity: 1; }
+
+  .main { flex: 1; padding: 32px 36px; max-width: 1000px; overflow-y: auto; }
+  .page-title { font-size: 19px; font-weight: 700; color: var(--ink); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .page-sub { font-size: 13px; color: var(--ink-faint); margin-bottom: 24px; }
+
+  .search-box { position: relative; margin-bottom: 8px; }
+  .search-box svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--ink-faint); pointer-events: none; }
+  .search-input { width: 100%; padding: 14px 16px 14px 46px; border-radius: var(--r-md); border: 1px solid var(--glass-brd); background: var(--bg-3); color: var(--ink); font-family: var(--font); font-size: 15px; outline: none; transition: border-color .15s; }
+  .search-input:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(139,92,246,0.15); }
+  .search-input::placeholder { color: var(--ink-faint); }
+  .search-hint { font-size: 12px; color: var(--ink-faint); margin: 8px 2px 20px; min-height: 16px; }
+  .filters { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin: 2px 2px 0; }
+  .filters label { font-size: 12.5px; color: var(--ink-faint); display: inline-flex; align-items: center; gap: 8px; }
+  .filters select { padding: 7px 10px; border-radius: var(--r-sm); border: 1px solid var(--glass-brd); background: var(--bg-3); color: var(--ink); font-family: var(--font); font-size: 13px; outline: none; cursor: pointer; transition: border-color .15s; }
+  .filters select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(139,92,246,0.15); }
+
+  .result-list { display: flex; flex-direction: column; gap: 12px; }
+  .result-card { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border: 1px solid var(--glass-brd); border-radius: var(--r-md); background: var(--bg-3); text-decoration: none; color: var(--ink); transition: all .15s; }
+  .result-card:hover { border-color: var(--violet); background: var(--bg-4); transform: translateY(-1px); }
+  .result-avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 22px; font-weight: 700; flex-shrink: 0; background-position: center; background-repeat: no-repeat; background-size: cover; }
+  .result-main { flex: 1; min-width: 0; }
+  .result-name { font-size: 15px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .result-handle { font-size: 13px; color: var(--ink-faint); }
+  .result-gender { font-size: 11.5px; color: var(--ink-faint); background: var(--glass); border: 1px solid var(--glass-brd); border-radius: 999px; padding: 1px 9px; }
+  .result-arrow { color: var(--ink-faint); flex-shrink: 0; }
+  mark.hl { background: rgba(139,92,246,0.30); color: inherit; border-radius: 3px; padding: 0 1px; }
+  .more-wrap { display: flex; justify-content: center; margin-top: 18px; }
+  .more-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--r-sm); border: 1px solid var(--glass-brd); background: var(--bg-3); color: var(--ink); font-family: var(--font); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .more-btn:hover { background: var(--bg-4); border-color: var(--violet); color: var(--violet); }
+
+  .empty-state { text-align: center; padding: 56px 0; color: var(--ink-faint); font-size: 14px; }
+  .empty-state svg { width: 40px; height: 40px; opacity: 0.4; margin-bottom: 12px; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .hdr-nav { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="../index.html" class="hdr-logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="8" fill="url(#hl)"/><defs><linearGradient id="hl" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#8b5cf6"/><stop offset=".5" stop-color="#22d3ee"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs><path d="M8 10h12M8 14h8M8 18h5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+    Scratch 扩展编辑器
+  </a>
+  <nav class="hdr-nav">
+    <a href="../index.html">首页</a>
+    <a href="./">用户</a>
+  </nav>
+  <div class="hdr-right">
+    <div class="hdr-user" id="hdrUser">
+      <div class="hdr-avatar" id="hdrAvatar">?</div>
+      <span id="hdrName">未登录</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-profile">
+      <div class="sb-avatar" id="sbAvatar">?</div>
+      <div class="sb-name" id="sbName">访客</div>
+      <div class="sb-handle" id="sbHandle"></div>
+    </div>
+    <div class="sb-sep"></div>
+
+    <div class="sb-label">个人资料</div>
+    <a class="sb-item" href="./">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      个人资料
+    </a>
+    <a class="sb-item active" href="./search.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      搜索用户
+    </a>
+    <a class="sb-item" href="./appearance.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      外观
+    </a>
+
+    <div class="sb-label">社交</div>
+    <a class="sb-item" href="./friends.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      好友 / 关注
+    </a>
+
+    <div class="sb-label">账号</div>
+    <a class="sb-item" href="./security.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      安全
+    </a>
+    <a class="sb-item" id="logoutBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      退出登录
+    </a>
+  </aside>
+
+  <main class="main">
+    <h1 class="page-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      搜索用户
+    </h1>
+    <p class="page-sub">按用户名或显示名称查找已同步公开资料的用户，点击即可查看其主页。</p>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="searchInput" type="text" placeholder="输入用户名或昵称…" autocomplete="off" />
+    </div>
+    <div class="filters">
+      <label>性别
+        <select id="fGender">
+          <option value="">全部</option>
+          <option value="male">男</option>
+          <option value="female">女</option>
+          <option value="secret">保密</option>
+        </select>
+      </label>
+      <label>排序
+        <select id="fSort">
+          <option value="active">最近活跃</option>
+          <option value="newest">最新加入</option>
+          <option value="name">用户名 A-Z</option>
+        </select>
+      </label>
+    </div>
+    <div class="search-hint" id="searchHint">输入关键词开始搜索。</div>
+
+    <div class="result-list" id="resultList"></div>
+    <div class="more-wrap" id="moreWrap" style="display:none">
+      <button class="more-btn" id="moreBtn">显示更多</button>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <div id="emptyText">暂无结果</div>
+    </div>
+  </main>
+</div>
+
+<script src="../auth-web-v2.js"></script>
+<script>
+(function () {
+  const USERS_KEY = 'extbuilder_users';
+  const SESSION_KEY = 'extbuilder_session';
+
+  function getUsers() { try { return JSON.parse(localStorage.getItem(USERS_KEY) || '{}'); } catch (e) { return {}; } }
+  function getSession() { try { var r = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); if (!r || !r.username) return null; if (r.expires && r.expires < Date.now()) { localStorage.removeItem(SESSION_KEY); return null; } return r; } catch (e) { return null; } }
+
+  function apiBase() {
+    var o = location.origin;
+    if (o.indexOf('scratchextensioneditor.cc.cd') !== -1) return '';
+    if (o.indexOf('scratchextensioneditor.pages.dev') !== -1) return '';
+    return 'https://scratchextensioneditor.cc.cd';
+  }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function paintAvatar(el, url, letter) {
+    if (!el) return;
+    if (url) { el.style.backgroundImage = 'url(' + url + ')'; el.textContent = ''; }
+    else { el.style.backgroundImage = ''; el.textContent = letter || '?'; }
+  }
+  var GENDER_LABELS = { male: '男', female: '女', secret: '保密' };
+
+  // ── 侧栏/顶栏：有登录态就显示本人，否则显示访客 ──
+  (function initChrome() {
+    var sess = getSession();
+    var sbNameEl = document.getElementById('sbName');
+    var sbAvatarEl = document.getElementById('sbAvatar');
+    var sbHandleEl = document.getElementById('sbHandle');
+    var hdrNameEl = document.getElementById('hdrName');
+    var hdrAvatarEl = document.getElementById('hdrAvatar');
+    if (sess && sess.username) {
+      var u = getUsers()[sess.username] || {};
+      var dn = u.displayName || sess.username;
+      var letter = dn.charAt(0).toUpperCase();
+      sbNameEl.textContent = dn; paintAvatar(sbAvatarEl, u.avatarDataUrl, letter);
+      sbHandleEl.textContent = '@' + sess.username;
+      hdrNameEl.textContent = dn; paintAvatar(hdrAvatarEl, u.avatarDataUrl, letter);
+    } else {
+      sbNameEl.textContent = '访客'; sbAvatarEl.textContent = '?'; sbHandleEl.textContent = '';
+      hdrNameEl.textContent = '未登录'; hdrAvatarEl.textContent = '?';
+    }
+  })();
+
+  document.getElementById('logoutBtn').addEventListener('click', function (e) {
+    e.preventDefault();
+    if (!confirm('确定要退出登录吗？')) return;
+    try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch (ex) {}
+    location.href = '../index.html';
+  });
+
+  // ── 搜索逻辑 ──
+  var input = document.getElementById('searchInput');
+  var hint = document.getElementById('searchHint');
+  var list = document.getElementById('resultList');
+  var emptyState = document.getElementById('emptyState');
+  var emptyText = document.getElementById('emptyText');
+  var reqId = 0;
+
+  function setState(state) {
+    if (state === 'empty') { emptyState.style.display = ''; list.innerHTML = ''; }
+    else { emptyState.style.display = 'none'; }
+  }
+
+  // 分页显示（每批 PAGE 条）+ 关键词高亮
+  var PAGE = 20;
+  var allResults = [];
+  var shown = 0;
+  var currentQuery = '';
+
+  function highlight(text, q) {
+    text = String(text == null ? '' : text);
+    if (!q) return document.createTextNode(text);
+    var idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return document.createTextNode(text);
+    var frag = document.createDocumentFragment();
+    if (idx > 0) frag.appendChild(document.createTextNode(text.slice(0, idx)));
+    var mark = document.createElement('mark');
+    mark.className = 'hl';
+    mark.textContent = text.slice(idx, idx + q.length);
+    frag.appendChild(mark);
+    if (idx + q.length < text.length) frag.appendChild(document.createTextNode(text.slice(idx + q.length)));
+    return frag;
+  }
+
+  function buildCard(r) {
+    var card = document.createElement('a');
+    card.className = 'result-card';
+    card.href = './?user=' + encodeURIComponent(r.username);
+
+    var avatar = document.createElement('div');
+    avatar.className = 'result-avatar';
+    var letter = (r.displayName || r.username).charAt(0).toUpperCase();
+    paintAvatar(avatar, '', letter);
+
+    var main = document.createElement('div');
+    main.className = 'result-main';
+    var nameRow = document.createElement('div');
+    nameRow.className = 'result-name';
+    nameRow.appendChild(highlight(r.displayName || r.username, currentQuery));
+    if (GENDER_LABELS[r.gender]) {
+      var g = document.createElement('span');
+      g.className = 'result-gender';
+      g.textContent = GENDER_LABELS[r.gender];
+      nameRow.appendChild(g);
+    }
+    var handle = document.createElement('div');
+    handle.className = 'result-handle';
+    var handleText = '@' + r.username;
+    if (r.createdAt) {
+      var cd = new Date(r.createdAt);
+      handleText += ' · 加入于 ' + cd.getFullYear() + '年' + (cd.getMonth() + 1) + '月';
+    }
+    handle.textContent = handleText;
+    main.appendChild(nameRow);
+    main.appendChild(handle);
+
+    var arrow = document.createElement('div');
+    arrow.className = 'result-arrow';
+    arrow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>';
+
+    card.appendChild(avatar);
+    card.appendChild(main);
+    card.appendChild(arrow);
+
+    // 有头像则补拉真实头像
+    if (r.hasAvatar) {
+      fetch(apiBase() + '/api/avatar?u=' + encodeURIComponent(r.username), { cache: 'no-store' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (j) { if (j && j.ok && j.avatar) paintAvatar(avatar, j.avatar, letter); })
+        .catch(function () {});
+    }
+    return card;
+  }
+
+  function updateMoreBtn() {
+    var wrap = document.getElementById('moreWrap');
+    var btn = document.getElementById('moreBtn');
+    if (!wrap || !btn) return;
+    if (shown < allResults.length) {
+      wrap.style.display = '';
+      btn.textContent = '显示更多（剩余 ' + (allResults.length - shown) + '）';
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  function appendPage() {
+    var end = Math.min(shown + PAGE, allResults.length);
+    for (var i = shown; i < end; i++) list.appendChild(buildCard(allResults[i]));
+    shown = end;
+    updateMoreBtn();
+  }
+
+  function resetResults() { allResults = []; shown = 0; updateMoreBtn(); }
+
+  function renderResults(results) {
+    allResults = results || [];
+    shown = 0;
+    list.innerHTML = '';
+    if (allResults.length === 0) {
+      emptyText.textContent = '没有找到匹配的用户，换个关键词试试。';
+      setState('empty');
+      updateMoreBtn();
+      return;
+    }
+    setState('list');
+    appendPage();
+  }
+
+  var fGender = document.getElementById('fGender');
+  var fSort = document.getElementById('fSort');
+
+  function doSearch(q) {
+    var myId = ++reqId;
+    q = (q || '').trim();
+    var gender = fGender ? fGender.value : '';
+    var sort = fSort ? fSort.value : 'active';
+    // 关键词与性别筛选都为空时，不发起请求（提示用户输入）
+    if (!q && !gender) {
+      list.innerHTML = '';
+      setState('empty');
+      emptyText.textContent = '输入关键词开始搜索。';
+      hint.textContent = '输入关键词开始搜索，或选择「性别」筛选。';
+      resetResults();
+      return;
+    }
+    syncUrl(q, gender, sort);   // 搜索状态写入 URL，便于分享/刷新保持
+    hint.textContent = '搜索中…';
+    var url = apiBase() + '/api/users/search?q=' + encodeURIComponent(q)
+      + '&gender=' + encodeURIComponent(gender) + '&sort=' + encodeURIComponent(sort);
+    fetch(url, { cache: 'no-store' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (j) {
+        if (myId !== reqId) return; // 过期请求丢弃
+        if (!j || !j.ok) { hint.textContent = '搜索失败，请稍后重试。'; setState('empty'); emptyText.textContent = '搜索失败。'; resetResults(); return; }
+        var n = (j.results || []).length;
+        var head = q ? ('找到 ' + n + ' 个用户') : ('筛选出 ' + n + ' 个用户');
+        hint.textContent = head
+          + (j.total ? '（共 ' + j.total + ' 个公开资料）' : '')
+          + (j.truncated ? '，仅显示前 ' + n + ' 条' : '');
+        currentQuery = q;
+        renderResults(j.results);
+      })
+      .catch(function () {
+        if (myId !== reqId) return;
+        hint.textContent = '网络错误，请稍后重试。';
+        setState('empty'); emptyText.textContent = '网络错误。';
+        resetResults();
+      });
+  }
+
+  // 筛选变化 → 用当前关键词重新搜索
+  if (fGender) fGender.addEventListener('change', function () { doSearch(input.value); });
+  if (fSort) fSort.addEventListener('change', function () { doSearch(input.value); });
+
+  // 「显示更多」→ 展开下一批
+  var moreBtn = document.getElementById('moreBtn');
+  if (moreBtn) moreBtn.addEventListener('click', function () { appendPage(); });
+
+  // 防抖输入
+  var t = null;
+  input.addEventListener('input', function () {
+    var v = input.value;
+    clearTimeout(t);
+    t = setTimeout(function () { doSearch(v); }, 250);
+  });
+
+  // URL 深链（?q=&gender=&sort=）：填入并自动搜索；搜索/筛选变化时同步回 URL（可分享/收藏）
+  function syncUrl(q, gender, sort) {
+    try {
+      var sp = new URLSearchParams();
+      if (q) sp.set('q', q);
+      if (gender) sp.set('gender', gender);
+      if (sort && sort !== 'active') sp.set('sort', sort);
+      var qs = sp.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    } catch (e) {}
+  }
+  (function initFromUrl() {
+    var sp = new URLSearchParams(location.search);
+    var q = sp.get('q') || '';
+    var g = sp.get('gender') || '';
+    var s = sp.get('sort') || '';
+    if (q) input.value = q;
+    if (g && fGender.querySelector('option[value="' + g + '"]')) fGender.value = g;
+    if (s && fSort.querySelector('option[value="' + s + '"]')) fSort.value = s;
+    if (q || (fGender && fGender.value)) doSearch(input.value);
+  })();
+  input.focus();
+})();
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@
  */
 
 import React, {useState, useEffect, useRef, useCallback, useMemo, Component} from 'react';
+import {createPortal} from 'react-dom';
 import LazyScratchBlocks from '../lib/tw-lazy-scratch-blocks.js';
 import {
     TOOLBOX_CONFIG,
@@ -24,6 +25,7 @@ import {
     cloudAvailable, cloudSearchUsers, cloudListRelations, cloudFollow, cloudUnfollow
 } from '../lib/cloud.js';
 import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
+import {installVoiceInput} from '../lib/voice-input.js';
 import '../styles/extension-builder.css';
 
 // 积木预设颜色（Scratch 风格常用色，供积木定义面板选择）
@@ -245,7 +247,19 @@ const ExtensionBuilderInner = () => {
     }, []);
 
     const handleBuilderMaximize = useCallback(() => {
-        setBuilderMaximized((prev) => !prev);
+        setBuilderMaximized((prev) => {
+            const next = !prev;
+            // Toggle overflow:hidden on parent chain so the fixed modal isn't clipped
+            const modal = builderModalRef.current;
+            if (modal) {
+                let el = modal.parentElement;
+                while (el && el !== document.documentElement) {
+                    el.style.overflow = next ? 'visible' : '';
+                    el = el.parentElement;
+                }
+            }
+            return next;
+        });
     }, []);
 
     // 8-direction resize, driven by the edge/corner handles.
@@ -349,6 +363,51 @@ const ExtensionBuilderInner = () => {
     const [installStatus, setInstallStatus] = useState('');
     const [installError, setInstallError] = useState('');
     const [installLoading, setInstallLoading] = useState(false);
+    const [installLog, setInstallLog] = useState([]);
+    const installPanelRef = useRef(null);
+    const installDragRef = useRef(null);
+    const [installFloatBounds, setInstallFloatBounds] = useState({ x: 300, y: 150, w: 560, h: 440 });
+    const [installMinimized, setInstallMinimized] = useState(false);
+    const [installMaximized, setInstallMaximized] = useState(false);
+
+    // ─── 全局 z-index 层级管理（基准 1000000，高于所有旧的固定 z-index） ───
+    const Z_BASE = 1000000;
+    const [panelZIndexes, setPanelZIndexes] = useState({
+        builder: Z_BASE, settings: Z_BASE, user: Z_BASE, stats: Z_BASE, install: Z_BASE, rtc: Z_BASE, nova: Z_BASE
+    });
+    const zCounterRef = useRef(Z_BASE);
+    const bringToFront = useCallback((panelId) => {
+        zCounterRef.current += 1;
+        const newZ = zCounterRef.current;
+        setPanelZIndexes(prev => {
+            const next = {};
+            Object.keys(prev).forEach(k => {
+                next[k] = k === panelId ? newZ : Math.max(Z_BASE - 1000, prev[k] - 1);
+            });
+            return next;
+        });
+    }, []);
+    const getZIndex = useCallback((panelId) => panelZIndexes[panelId] || Z_BASE, [panelZIndexes]);
+
+    // 桥接：供纯 JS 面板（实时协作）调用置顶
+    useEffect(() => {
+        window.__extBringToFront = bringToFront;
+        return () => { delete window.__extBringToFront; };
+    }, [bringToFront]);
+
+    // 把 rtc / nova（bilup AI）面板的层级同步到其真实 DOM（这些面板不在 React 树内）
+    useEffect(() => {
+        const rtc = document.querySelector('.rtc-panel');
+        if (rtc) rtc.style.zIndex = String(panelZIndexes.rtc);
+        document.querySelectorAll('.sa-nova-wm-root').forEach(el => {
+            el.style.zIndex = String(panelZIndexes.nova);
+        });
+    }, [panelZIndexes]);
+
+    // AI 面板语音输入（SenseVoice 本地识别）：注入麦克风按钮
+    useEffect(() => {
+        installVoiceInput();
+    }, []);
     const installFileRef = useRef(null);
     // 统一设置面板（含编辑器设置 + 插件管理标签页）
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -393,6 +452,9 @@ const ExtensionBuilderInner = () => {
     const statsPanelRef = useRef(null);
     const statsResizeLayerRef = useRef(null);
     const [statsFloatBounds, setStatsFloatBounds] = useState({ x: 200, y: 100, w: 560, h: 480 });
+    const [statsMinimized, setStatsMinimized] = useState(false);
+    const [statsMaximized, setStatsMaximized] = useState(false);
+    const statsSavedBounds = useRef(null);
     const statsDragRef = useRef(null);
     const statsResizeRef = useRef(null);
     const [statsTick, setStatsTick] = useState(0); // 强制 projectStats 重算的计数器
@@ -2110,20 +2172,25 @@ const ExtensionBuilderInner = () => {
         const panel = settingsPanelRef.current;
         if (!panel) return;
         if (!settingsMaximized) {
+            // Save current bounds for restore
             const rect = panel.getBoundingClientRect();
             settingsBoundsRef.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-            panel.style.top = '8px';
-            panel.style.left = '8px';
-            panel.style.right = '8px';
+            // Clear inline positioning so CSS .maximized class takes over
+            panel.style.top = '';
+            panel.style.left = '';
+            panel.style.right = '';
+            panel.style.bottom = '';
             panel.style.width = '';
-            panel.style.height = 'calc(100vh - 16px)';
-            panel.style.transform = 'none';
+            panel.style.height = '';
+            panel.style.transform = '';
             setSettingsMaximized(true);
         } else {
+            // Restore saved bounds as inline styles
             if (settingsBoundsRef.current) {
                 panel.style.top = settingsBoundsRef.current.top + 'px';
                 panel.style.left = settingsBoundsRef.current.left + 'px';
                 panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
                 panel.style.width = settingsBoundsRef.current.width + 'px';
                 panel.style.height = settingsBoundsRef.current.height + 'px';
                 panel.style.transform = 'none';
@@ -2241,6 +2308,31 @@ const ExtensionBuilderInner = () => {
         return () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); cancelAnimationFrame(raf); };
     }, [showStatsPanel, handleStatsMouseMove, handleStatsMouseUp, syncStatsResizeLayerPos]);
 
+    // ─── 数据分析面板：最小化 / 最大化 ───
+    const handleStatsToggleMin = useCallback(() => setStatsMinimized(v => !v), []);
+    const handleStatsToggleMax = useCallback(() => {
+        const panel = statsPanelRef.current;
+        if (!panel) return;
+        if (!statsMaximized) {
+            const rect = panel.getBoundingClientRect();
+            statsSavedBounds.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+            panel.style.top = ''; panel.style.left = ''; panel.style.right = '';
+            panel.style.bottom = ''; panel.style.width = ''; panel.style.height = '';
+            panel.style.transform = '';
+            setStatsMaximized(true);
+        } else {
+            if (statsSavedBounds.current) {
+                panel.style.top = statsSavedBounds.current.top + 'px';
+                panel.style.left = statsSavedBounds.current.left + 'px';
+                panel.style.right = 'auto'; panel.style.bottom = 'auto';
+                panel.style.width = statsSavedBounds.current.width + 'px';
+                panel.style.height = statsSavedBounds.current.height + 'px';
+                panel.style.transform = 'none';
+            }
+            setStatsMaximized(false);
+        }
+    }, [statsMaximized]);
+
     // ─── 用户面板悬浮框：拖动 / 拉伸 / 最大化 / 最小化 ───
     const userDragRef = useRef(null);
     const userResizeRef = useRef(null);
@@ -2314,15 +2406,25 @@ const ExtensionBuilderInner = () => {
         if (!userMaximized) {
             const rect = panel.getBoundingClientRect();
             userFloatSavedBounds.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-            panel.style.top = '8px'; panel.style.left = '8px'; panel.style.right = '8px';
-            panel.style.width = ''; panel.style.height = 'calc(100vh - 16px)'; panel.style.transform = 'none';
+            // Clear inline positioning so CSS .maximized class takes over
+            panel.style.top = '';
+            panel.style.left = '';
+            panel.style.right = '';
+            panel.style.bottom = '';
+            panel.style.width = '';
+            panel.style.height = '';
+            panel.style.transform = '';
             setUserMaximized(true);
         } else {
+            // Restore saved bounds as inline styles
             if (userFloatSavedBounds.current) {
                 panel.style.top = userFloatSavedBounds.current.top + 'px';
-                panel.style.left = userFloatSavedBounds.current.left + 'px'; panel.style.right = 'auto';
+                panel.style.left = userFloatSavedBounds.current.left + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
                 panel.style.width = userFloatSavedBounds.current.width + 'px';
-                panel.style.height = userFloatSavedBounds.current.height + 'px'; panel.style.transform = 'none';
+                panel.style.height = userFloatSavedBounds.current.height + 'px';
+                panel.style.transform = 'none';
             }
             setUserMaximized(false);
         }
@@ -2694,12 +2796,35 @@ const ExtensionBuilderInner = () => {
             .then(cleanup => { extAddonsCleanupRef.current = cleanup; });
     }, []);
 
+    // 安装面板拖动
+    const handleInstallDragStart = useCallback((e) => {
+        if (e.target.closest('.ext-float-btns')) return;
+        const panel = installPanelRef.current;
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        const startX = e.clientX - rect.left;
+        const startY = e.clientY - rect.top;
+        const move = (ev) => {
+            panel.style.left = (ev.clientX - startX) + 'px';
+            panel.style.top = (ev.clientY - startY) + 'px';
+            panel.style.right = 'auto';
+        };
+        const up = () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            const r = panel.getBoundingClientRect();
+            setInstallFloatBounds({ x: r.left, y: r.top, w: r.width, h: r.height });
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        bringToFront('install');
+    }, [bringToFront]);
+
     // 从来源安装插件（对齐 DSH：dsh plugin add <npm/github/git/url>）
     const handleInstallFromSource = useCallback(async (sourceSpec) => {
-        if (!sourceSpec || !sourceSpec.trim()) { setInstallError('请输入来源（npm 包名 / github:owner/repo / 直链 URL）'); return; }
+        if (!sourceSpec || !sourceSpec.trim()) { setInstallLog(prev => [...prev, {type: 'error', text: '✕ 请输入来源（npm 包名 / github:owner/repo / 直链 URL）'}]); return; }
         setInstallLoading(true);
-        setInstallError('');
-        setInstallStatus('正在解析来源：' + sourceSpec.trim() + ' …');
+        setInstallLog(prev => [...prev, {type: 'info', text: '⏳ 正在解析来源：' + sourceSpec.trim()}]);
         try {
             const imported = await importAddonFromSource(sourceSpec.trim());
             if (!imported.length) throw new Error('来源中没有有效的插件对象');
@@ -2708,11 +2833,11 @@ const ExtensionBuilderInner = () => {
             setAddonState(nextState);
             setAddonStateInternal(nextState);
             reapplyAddons();
-            setInstallStatus('已安装 ' + imported.length + ' 个插件：' + imported.map(p => p.name).join('、'));
+            setInstallLog(prev => [...prev, {type: 'success', text: '✓ 已安装 ' + imported.length + ' 个插件：' + imported.map(p => p.name).join('、')}]);
             setInstallLoading(false);
         } catch (err) {
             setInstallLoading(false);
-            setInstallError('安装失败：' + (err && err.message ? err.message : String(err)));
+            setInstallLog(prev => [...prev, {type: 'error', text: '✕ 安装失败：' + (err && err.message ? err.message : String(err))}]);
         }
     }, [addonState, reapplyAddons]);
 
@@ -2723,7 +2848,7 @@ const ExtensionBuilderInner = () => {
         setAddonState(nextState);
         setAddonStateInternal(nextState);
         reapplyAddons();
-        setInstallStatus('已安装 ' + imported.length + ' 个插件：' + imported.map(p => p.name).join('、'));
+        setInstallLog(prev => [...prev, {type: 'success', text: '✓ 已安装 ' + imported.length + ' 个插件：' + imported.map(p => p.name).join('、')}]);
         setInstallLoading(false);
     }, [addonState, reapplyAddons]);
 
@@ -2749,22 +2874,25 @@ const ExtensionBuilderInner = () => {
             setInstallError('');
             try {
                 if (mode === 'folder') {
-                    setInstallStatus('正在读取文件夹（' + fileList.length + ' 个文件）…');
+                    setInstallLog(prev => [...prev, {type: 'cmd', text: '$ import-folder ' + fileList.length + ' files'}]);
+                    setInstallLog(prev => [...prev, {type: 'info', text: '⏳ 正在读取文件夹（' + fileList.length + ' 个文件）...'}]);
                     const imported = await importAddonBundle([...fileList], 'local:folder:' + (fileList[0].webkitRelativePath || fileList[0].name));
                     if (!imported.length) throw new Error('文件夹中没有有效的插件包');
                     _activateImported(imported, 'folder');
                 } else if (mode === 'zip') {
                     const file = fileList[0];
-                    setInstallStatus('正在解压 ZIP：' + file.name + ' …');
+                    setInstallLog(prev => [...prev, {type: 'cmd', text: '$ import-zip ' + file.name}]);
+                    setInstallLog(prev => [...prev, {type: 'info', text: '⏳ 正在解压 ZIP...'}]);
                     const buf = await file.arrayBuffer();
                     const imported = await importAddonFromZip(buf, 'local:zip:' + file.name);
                     if (!imported.length) throw new Error('ZIP 中没有有效的插件包');
                     _activateImported(imported, 'zip');
                 } else {
                     const file = fileList[0];
+                    setInstallLog(prev => [...prev, {type: 'cmd', text: '$ import-file ' + file.name}]);
                     const reader = new FileReader();
                     reader.onload = () => {
-                        setInstallStatus('正在安装本地文件：' + file.name + ' …');
+                        setInstallLog(prev => [...prev, {type: 'info', text: '⏳ 正在安装本地文件...'}]);
                         importAddonFromSource('local:' + file.name, {fileText: String(reader.result)})
                             .then(imported => {
                                 if (!imported.length) throw new Error('文件中没有有效的插件对象');
@@ -2772,15 +2900,15 @@ const ExtensionBuilderInner = () => {
                             })
                             .catch(err => {
                                 setInstallLoading(false);
-                                setInstallError('安装失败：' + (err && err.message ? err.message : String(err)));
+                                setInstallLog(prev => [...prev, {type: 'error', text: '✕ 安装失败：' + (err && err.message ? err.message : String(err))}]);
                             });
                     };
-                    reader.onerror = () => { setInstallLoading(false); setInstallError('读取文件失败'); };
+                    reader.onerror = () => { setInstallLoading(false); setInstallLog(prev => [...prev, {type: 'error', text: '✕ 读取文件失败'}]); };
                     reader.readAsText(file);
                 }
             } catch (err) {
                 setInstallLoading(false);
-                setInstallError('安装失败：' + (err && err.message ? err.message : String(err)));
+                setInstallLog(prev => [...prev, {type: 'error', text: '✕ 安装失败：' + (err && err.message ? err.message : String(err))}]);
             }
         };
         input.click();
@@ -3876,15 +4004,16 @@ const ExtensionBuilderInner = () => {
                 <div className="ext-builder-main">
                 {/* Block builder as a floating window (opens via 制作积木 button) */}
                 {showBlockBuilder && (
-                    <div className="ext-builder-modal-backdrop">
+                    <div className="ext-builder-modal-backdrop" style={{zIndex: getZIndex('builder')}}>
                         <div
                             ref={builderModalRef}
-                            className="ext-builder-modal"
+                            className={`ext-builder-modal${builderMaximized ? ' maximized' : ''}`}
+                            onMouseDown={() => bringToFront('builder')}
                             style={{
                                 ...(builderModalPos ? { left: builderModalPos.x, top: builderModalPos.y, right: 'auto' } : null),
                                 ...(builderSize ? { width: builderSize.width, height: builderSize.height } : null),
-                                ...(builderMaximized ? { top: 8, left: 8, right: 8, bottom: 8, height: 'auto', maxHeight: 'none' } : null),
-                                ...(builderMinimized ? { display: 'none' } : null)
+                                ...(builderMinimized ? { display: 'none' } : null),
+                                zIndex: getZIndex('builder')
                             }}
                         >
                             <div
@@ -4095,8 +4224,7 @@ const ExtensionBuilderInner = () => {
                                     </div>
 
                                     {/* Block metadata (collapsed by default for cleaner UI) */}
-                                    <details className="ext-block-editor-meta">
-                                        <summary>积木元数据（高级）</summary>
+                                    <div className="ext-block-editor-meta">
                                         <label className="ext-block-editor-label">ID</label>
                                         <input
                                             className="ext-block-editor-input"
@@ -4199,7 +4327,7 @@ const ExtensionBuilderInner = () => {
                                         >
                                             {currentBlock.icon ? '移除图标' : '上传积木图标'}
                                         </button>
-                                    </details>
+                                    </div>
 
                                     <div className="ext-block-editor-hint">
                                         在右侧 Blockly 工作区拖入积木来定义此积木的代码实现
@@ -4286,9 +4414,9 @@ const ExtensionBuilderInner = () => {
                 )}
                 <div
                     ref={settingsPanelRef}
-                    className={`ext-float-panel ext-settings-unified ${settingsMinimized ? 'ext-float-minimized' : ''}`}
-                    style={{ display: settingsMinimized ? 'none' : '' }}
-                    onMouseDown={handleSettingsHeaderMouseDown}
+                    className={`ext-float-panel ext-settings-unified ${settingsMinimized ? 'ext-float-minimized' : ''}${settingsMaximized ? ' maximized' : ''}`}
+                    style={{ display: settingsMinimized ? 'none' : '', zIndex: getZIndex('settings') }}
+                    onMouseDown={(e) => { bringToFront('settings'); handleSettingsHeaderMouseDown(e); }}
                 >
                     <div
                         className="ext-settings-unified-header ext-float-header"
@@ -4880,82 +5008,70 @@ const ExtensionBuilderInner = () => {
                 </div>
             )}
 
-            {/* 安装插件对话框（对齐 DeepSeek Harness 的 dsh plugin add） */}
+            {/* 安装插件 — 悬浮框 */}
             {showInstallModal && (
                 <div
-                    className="ext-auth-backdrop"
-                    onClick={(e) => { if (e.target === e.currentTarget) setShowInstallModal(false); }}
+                    ref={installPanelRef}
+                    className={`ext-float-panel ext-install-panel${installMinimized ? ' ext-float-minimized' : ''}${installMaximized ? ' maximized' : ''}`}
+                    style={{left: installFloatBounds.x, top: installFloatBounds.y, width: installFloatBounds.w, height: installFloatBounds.h, display: installMinimized ? 'none' : '', zIndex: getZIndex('install')}}
+                    onMouseDown={() => bringToFront('install')}
                 >
-                    <div className="ext-auth-card ext-install-card">
-                        <div className="ext-auth-header">
-                            <span className="ext-auth-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>安装插件</span>
-                            <button
-                                type="button"
-                                className="ext-builder-modal-close"
-                                onClick={() => setShowInstallModal(false)}
-                                aria-label="关闭"
-                                title="关闭"
-                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                    <div className="ext-float-header" onMouseDown={(e) => handleInstallDragStart(e)}>
+                        <span className="ext-float-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                            安装插件
+                        </span>
+                        <div className="ext-float-btns">
+                            <button className="ext-float-btn" onClick={() => setInstallMinimized(v => !v)} title={installMinimized ? '还原' : '最小化'}>−</button>
+                            <button className="ext-float-btn" onClick={() => setInstallMaximized(v => !v)} title={installMaximized ? '还原' : '最大化'}>{installMaximized ? '❐' : '□'}</button>
+                            <button className="ext-float-btn ext-float-btn-close" onClick={() => setShowInstallModal(false)} title="关闭">×</button>
                         </div>
-                        <div className="ext-install-body">
-                            <p className="ext-install-hint">
-                                粘贴来源后点击「安装」。支持：
-                            </p>
-                            <ul className="ext-install-sources">
-                                <li><code>npm 包名</code>（如 <code>my-addon</code> 或 <code>@scope/addon</code>）</li>
-                                <li><code>github:owner/repo</code> 或 <code>owner/repo</code></li>
-                                <li>直链 <code>https://…/plugin.js</code> 或 <code>.tgz</code> 包</li>
-                                <li>本地 <code>.js</code> 文件 / 文件夹（含 HTML·CSS·图片·JS）/ <code>.zip</code> 包</li>
-                            </ul>
+                    </div>
+                    <div className="ext-install-body">
+                        <div className="ext-install-hint">
+                            输入 npm 包名、github 仓库、直链 URL，按 Enter 安装。输入 <code>help</code> 查看支持的格式。
+                        </div>
+                        <div className="ext-install-output" ref={el => { if (el) el.scrollTop = el.scrollHeight; }}>
+                            {installLog.map((line, i) => (
+                                <div key={i} className={`ext-install-line ${line.type}`}>{line.text}</div>
+                            ))}
+                            {installLoading && <div className="ext-install-line info">⏳ 安装中...</div>}
+                        </div>
+                        <div className="ext-install-input-row">
+                            <span className="ext-install-prompt">$</span>
                             <input
                                 type="text"
                                 className="ext-install-input"
-                                placeholder="npm 包名 / github:owner/repo / 直链 URL"
+                                placeholder="npm install <package>  或直接输入包名"
                                 value={installSource}
                                 onChange={(e) => setInstallSource(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && !installLoading) handleInstallFromSource(installSource); }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !installLoading && installSource.trim()) {
+                                        const cmd = installSource.trim();
+                                        if (cmd === 'help' || cmd === '?') {
+                                            setInstallLog(prev => [...prev,
+                                                {type: 'info', text: '支持的安装源：'},
+                                                {type: 'info', text: '  npm: <包名>  或  npm install <包名>'},
+                                                {type: 'info', text: '  github: <owner/repo>  或  <owner/repo>'},
+                                                {type: 'info', text: '  url: <https://…/plugin.js>'},
+                                                {type: 'info', text: '  本地文件：点击下方按钮选择'},
+                                            ]);
+                                            setInstallSource('');
+                                            return;
+                                        }
+                                        const pkg = cmd.replace(/^npm\s+install\s+/i, '');
+                                        setInstallLog(prev => [...prev, {type: 'cmd', text: '$ ' + cmd}]);
+                                        setInstallSource('');
+                                        handleInstallFromSource(pkg);
+                                    }
+                                }}
+                                autoFocus
                             />
-                            <div className="ext-install-actions">
-                                <button
-                                    type="button"
-                                    className="ext-addons-action-btn ext-addons-action-btn-primary"
-                                    disabled={installLoading}
-                                    onClick={() => handleInstallFromSource(installSource)}
-                                >{installLoading ? '安装中…' : '安装'}</button>
-                                <button
-                                    type="button"
-                                    className="ext-addons-action-btn"
-                                    disabled={installLoading}
-                                    onClick={() => handleInstallLocalFile('file')}
-                                    title="导入单个 JS 插件文件"
-                                >单个 JS</button>
-                                <button
-                                    type="button"
-                                    className="ext-addons-action-btn"
-                                    disabled={installLoading}
-                                    onClick={() => handleInstallLocalFile('folder')}
-                                    title="导入整个文件夹（含 index.js 与 HTML/CSS/图片/JS 等资源）"
-                                >文件夹</button>
-                                <button
-                                    type="button"
-                                    className="ext-addons-action-btn"
-                                    disabled={installLoading}
-                                    onClick={() => handleInstallLocalFile('zip')}
-                                    title="导入 ZIP 包（含 index.js 与 HTML/CSS/图片/JS 等资源）"
-                                >ZIP 包</button>
-                                <button
-                                    type="button"
-                                    className="ext-addons-action-btn"
-                                    onClick={() => { setShowInstallModal(false); }}
-                                >取消</button>
-                            </div>
-                            {installStatus && <div className="ext-install-status">✓ {installStatus}</div>}
-                            {installError && <div className="ext-install-error">✕ {installError}</div>}
-                            <p className="ext-install-note">
-                                文件夹 / ZIP 需含 <code>index.js</code> 入口；其它 HTML·CSS·图片·JS 会作为资源随插件持久化，
-                                可在 <code>setup(ctx)</code> 中通过 <code>ctx.loadAsset()</code> / <code>ctx.fileOverride()</code> 读取并改写网页底层文件。
-                                文档见右上角「开发教程」。
-                            </p>
+                        </div>
+                        <div className="ext-install-toolbar">
+                            <button type="button" className="ext-install-tool-btn" disabled={installLoading} onClick={() => handleInstallLocalFile('file')}>📄 JS</button>
+                            <button type="button" className="ext-install-tool-btn" disabled={installLoading} onClick={() => handleInstallLocalFile('folder')}>📁 文件夹</button>
+                            <button type="button" className="ext-install-tool-btn" disabled={installLoading} onClick={() => handleInstallLocalFile('zip')}>📦 ZIP</button>
                         </div>
                     </div>
                 </div>
@@ -4976,9 +5092,9 @@ const ExtensionBuilderInner = () => {
                 )}
                 <div
                     ref={userFloatRef}
-                    className={`ext-float-panel ${userMinimized ? 'ext-float-minimized' : ''}`}
-                    style={{ display: userMinimized ? 'none' : '', left: userFloatBounds.x, top: userFloatBounds.y, width: userFloatBounds.w, height: userFloatBounds.h }}
-                    onMouseDown={handleUserHeaderMouseDown}
+                    className={`ext-float-panel ${userMinimized ? 'ext-float-minimized' : ''}${userMaximized ? ' maximized' : ''}`}
+                    style={{ display: userMinimized ? 'none' : '', left: userFloatBounds.x, top: userFloatBounds.y, width: userFloatBounds.w, height: userFloatBounds.h, zIndex: getZIndex('user') }}
+                    onMouseDown={(e) => { bringToFront('user'); handleUserHeaderMouseDown(e); }}
                 >
                     <div className="ext-float-header">
                         <span className="ext-float-title">
@@ -5296,15 +5412,18 @@ const ExtensionBuilderInner = () => {
             {showStatsPanel && (
                 <React.Fragment>
                 {/* 自由拉伸层（8 方向手柄，常驻显示） */}
+                {!statsMinimized && !statsMaximized && (
                 <div className="ext-float-resize-layer" ref={statsResizeLayerRef}>
                     {['n','s','e','w','ne','nw','se','sw'].map(dir => (
                         <div key={dir} className={`ext-float-resize-handle ext-fz-${dir}`} onMouseDown={handleStatsResizeDown(dir)} />
                     ))}
                 </div>
+                )}
                 <div
                     ref={statsPanelRef}
-                    className="ext-float-panel ext-stats-panel"
-                    style={{left: statsFloatBounds.x, top: statsFloatBounds.y, width: statsFloatBounds.w, height: statsFloatBounds.h}}
+                    className={`ext-float-panel ext-stats-panel${statsMinimized ? ' ext-float-minimized' : ''}${statsMaximized ? ' maximized' : ''}`}
+                    style={{left: statsFloatBounds.x, top: statsFloatBounds.y, width: statsFloatBounds.w, height: statsFloatBounds.h, display: statsMinimized ? 'none' : '', zIndex: getZIndex('stats')}}
+                    onMouseDown={() => bringToFront('stats')}
                 >
                     <div className="ext-float-header" onMouseDown={handleStatsHeaderMouseDown}>
                         <span className="ext-float-title">
@@ -5315,9 +5434,9 @@ const ExtensionBuilderInner = () => {
                             项目数据分析
                         </span>
                         <div className="ext-float-btns">
-                            <button className="ext-float-btn ext-float-btn-close" onClick={() => setShowStatsPanel(false)} title="关闭">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            </button>
+                            <button className="ext-float-btn" onClick={handleStatsToggleMin} title={statsMinimized ? '还原' : '最小化'}>−</button>
+                            <button className="ext-float-btn" onClick={handleStatsToggleMax} title={statsMaximized ? '还原' : '最大化'}>{statsMaximized ? '❐' : '□'}</button>
+                            <button className="ext-float-btn ext-float-btn-close" onClick={() => setShowStatsPanel(false)} title="关闭">×</button>
                         </div>
                     </div>
                     <div className="ext-stats-body">

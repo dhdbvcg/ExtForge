@@ -168,7 +168,7 @@
     position: fixed;
     top: 60px;
     right: 20px;
-    width: 680px;
+    width: auto;
     min-width: 300px;
     min-height: 360px;
     max-height: calc(100vh - 80px);
@@ -181,6 +181,24 @@
     overflow: hidden;
     pointer-events: auto;
     z-index: 99999;
+    transition: none;
+}
+
+:global(.ext-builder-modal.maximized) {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    z-index: 999999 !important;
+}
+:global(.ext-builder-modal.maximized .ext-builder-modal-header) {
+    border-radius: 0 !important;
 }
 
 :global(.ext-builder-modal-header) {
@@ -275,6 +293,9 @@
     flex: 1;
     min-height: 0;
     padding: 4px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 
 /* ---- Add Block Panel: removed ---- */
@@ -282,12 +303,13 @@
 /* ---- Block List (left sidebar — like Scratch sprite list) ---- */
 
 :global(.ext-block-list) {
-    width: 260px;
+    width: 100%;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     background: #f7f7f7;
     border-right: 1px solid #d0d0d0;
+    border-bottom: 1px solid #d0d0d0;
     padding: 8px;
     gap: 4px;
     overflow-y: auto;
@@ -1029,6 +1051,8 @@
     flex-direction: column;
     gap: 4px;
     font-size: 12px;
+    flex: 1;
+    min-width: 320px;
 }
 
 :global(.ext-block-editor-header) {
@@ -1356,14 +1380,6 @@
     margin-top: 10px;
     border-top: 1px solid #333;
     padding-top: 6px;
-}
-
-:global(.ext-block-editor-meta summary) {
-    cursor: pointer;
-    color: #aaa;
-    font-size: 11px;
-    padding: 4px 0;
-    user-select: none;
 }
 
 :global(.ext-block-editor-meta summary:hover) {
@@ -3168,6 +3184,19 @@
     overflow: hidden;
     min-width: 420px;
     min-height: 360px;
+    transition: none;
+}
+:global(.ext-float-panel.maximized) {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 0 !important;
 }
 :global(.ext-float-panel.ext-float-minimized) {
     display: none;
@@ -3571,4 +3600,94 @@
 :global(.ext-stat-tip) {
     line-height: 1.5;
 }
+
+/* ── 安装插件悬浮框 ── */
+:global(.ext-install-panel) {
+    overflow: hidden;
+}
+:global(.ext-install-body) {
+    padding: 12px 14px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+:global(.ext-install-hint) {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+}
+:global(.ext-install-hint code) {
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #c7254e;
+}
+:global(.ext-install-output) {
+    flex: 1;
+    min-height: 120px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+:global(.ext-install-line) {
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+:global(.ext-install-line.cmd) { color: #569cd6; font-weight: 600; }
+:global(.ext-install-line.info) { color: #9cdcfe; }
+:global(.ext-install-line.success) { color: #6a9955; }
+:global(.ext-install-line.error) { color: #f44747; }
+:global(.ext-install-input-row) {
+    display: flex;
+    align-items: center;
+    background: #f5f5f5;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    gap: 8px;
+}
+:global(.ext-install-input-row:focus-within) {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26,115,232,.15);
+}
+:global(.ext-install-prompt) {
+    color: #1a73e8;
+    font-weight: 700;
+    font-size: 14px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+:global(.ext-install-input) {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: #333;
+}
+:global(.ext-install-input::placeholder) { color: #aaa; }
+:global(.ext-install-toolbar) {
+    display: flex;
+    gap: 6px;
+}
+:global(.ext-install-tool-btn) {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    color: #333;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s;
+}
+:global(.ext-install-tool-btn:hover) { background: #f0f0f0; }
+:global(.ext-install-tool-btn:disabled) { opacity: .4; cursor: not-allowed; }
 

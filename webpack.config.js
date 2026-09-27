@@ -267,6 +267,25 @@ const base = {
                 }
             });
 
+            // 删除插件目录。内置（随编辑器分发）的会被运行时拒绝，见 removePlugin()。
+            // 不挂 body-parser：这里只收一个目录名，自己收最稳。
+            app.post('/ext-plugins/remove', (req, res) => {
+                let raw = '';
+                req.on('data', (c) => {
+                    raw += c;
+                    // 只收一个目录名，超过 8KB 一定是异常请求
+                    if (raw.length > 8192) req.destroy();
+                });
+                req.on('end', () => {
+                    let dir = '';
+                    try { dir = (JSON.parse(raw || '{}') || {}).dir || ''; } catch (e) { /* 下面统一报错 */ }
+                    if (!dir) return res.status(400).json({ok: false, error: '缺少 dir 参数'});
+                    let out;
+                    try { out = pluginRuntime.removePlugin(dir); } catch (e) { out = {ok: false, error: String(e && e.message || e)}; }
+                    res.status(out.ok ? 200 : 400).json(out);
+                });
+            });
+
             // 启动所有带 Node 侧服务的插件（它们各自 fork 成子进程）。
             pluginRuntime.start();
 

@@ -395,6 +395,32 @@ export async function importAddonFromZip(arrayBuffer, sourceSpec) {
 
 const CDN = 'https://cdn.jsdelivr.net';
 
+/**
+ * jsDelivr / GitHub 的默认分支名。
+ *
+ * jsDelivr 的 `/gh/` 端点**必须**带版本段（分支 / tag / commit）：
+ *   /gh/owner/repo@main/path   → 200
+ *   /gh/owner/repo/path        → 404
+ * 之前插件市场一直加载不出来，根因就在这里 —— 拼接时漏了 `@main`。
+ * 这些仓库都用 main 作默认分支，固定写死即可。
+ */
+const GH_REF = 'main';
+
+/** jsDelivr 上某个 GitHub 仓库的根 URL（注意结尾带斜杠）。 */
+function ghCdn(owner, repo, ref) {
+    return CDN + '/gh/' + owner + '/' + repo + '@' + (ref || GH_REF) + '/';
+}
+
+/**
+ * raw.githubusercontent.com 直链。
+ * 它同样返回 `access-control-allow-origin: *`，所以能在浏览器里直接 fetch，
+ * 用作 jsDelivr 之外的最后一层兜底（CDN 偶发故障 / 缓存未生成时很有用）。
+ */
+function ghRaw(owner, repo, path, ref) {
+    return 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' +
+        (ref || GH_REF) + '/' + String(path == null ? '' : path).replace(/^\/+/, '');
+}
+
 // 识别来源类型：npm / github / git / url / tarball
 function detectSourceType(spec) {
     spec = (spec || '').trim();
@@ -481,7 +507,7 @@ async function resolveNpm(pkg) {
 }
 
 async function resolveGithub(owner, repo) {
-    const base = CDN + '/gh/' + owner + '/' + repo + '/';
+    const base = ghCdn(owner, repo);
     const candidates = ['package.json', 'index.js', 'dist/index.js', 'src/index.js',  'dist/bundle.js', 'build/index.js'];
     for (const c of candidates) {
         try {
@@ -632,7 +658,7 @@ export async function importAddonFromGithubDir(owner, repo, dir) {
  * 返回 [{ id, name, description, category, dir, source }]
  */
 export async function fetchAddonMarketList(owner, repo) {
-    const base = CDN + '/gh/' + owner + '/' + repo + '/';
+    const base = ghCdn(owner, repo);
     let manifest;
     try {
         manifest = JSON.parse(await fetchText(base + 'plugins.json'));
@@ -697,31 +723,69 @@ export async function fetchAddonMarketFromTopic(topic) {
     const MARKET_OWNER = 'dhdbvcg';
     const MARKET_REPO = 'scratch-ext-addon';
 
-    let manifest;
-    // 策略 1：GitHub Contents API（支持 CORS，实时数据，返回 base64）
-    try {
-        const api = 'https://api.github.com/repos/' + MARKET_OWNER + '/' + MARKET_REPO + '/contents/plugins.json';
-        console.log('[ExtAddons] trying GitHub Contents API:', api);
-        const res = await fetch(api, {cache: 'no-store'});
-        if (res.ok) {
-            const data = await res.json();
-            if (data.content && data.encoding === 'base64') {
-                // 正确解码 UTF-8：atob 返回二进制字符串，需经 TextDecoder 转 UTF-8
+    /**
+     * 三条取数路径，按「实时性 + 可靠性」排序，逐条尝试。
+     *
+     * 为什么需要三条：这个函数是「插件市场」按钮的唯一数据来源，任何一条
+     * 通道挂掉都会让整个市场空白。而这三条通道的失败模式互不重叠 ——
+     * API 会被限流（无 token 时 60 次/小时/IP），CDN 会有缓存未生成，
+     * raw 在国内网络偶发不通。只留一条就等于把这个按钮的可用性押在它上面。
+     *
+     * 注意 jsDelivr 那条必须带 `@main`（见文件顶部 GH_REF 的注释），
+     * 之前市场一直加载不出来就是因为漏了它。
+     */
+    const attempts = [
+        {
+            name: 'GitHub Contents API',
+            url: 'https://api.github.com/repos/' + MARKET_OWNER + '/' + MARKET_REPO + '/contents/plugins.json',
+            // Contents API 返回的是 base64 包装的 JSON，需要单独解码
+            decode: async (res) => {
+                const data = await res.json();
+                if (!data.content || data.encoding !== 'base64') throw new Error('返回体不是 base64 内容');
                 const bin = atob(data.content.replace(/\s/g, ''));
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                manifest = JSON.parse(new TextDecoder('utf-8').decode(bytes));
-                console.log('[ExtAddons] Contents API OK, decoded length:', JSON.stringify(manifest).length);
-            } else { throw new Error('unexpected encoding'); }
-        } else { throw new Error('HTTP ' + res.status); }
-    } catch (e) {
-        console.warn('[ExtAddons] Contents API failed, fallback to jsDelivr:', e && e.message);
-        // 策略 2：jsDelivr CDN（有 CORS，但可能缓存旧数据）
-        const base = CDN + '/gh/' + MARKET_OWNER + '/' + MARKET_REPO + '/';
-        const ts = '_v=' + Date.now() + '_' + Math.random().toString(36).slice(2);
-        console.log('[ExtAddons] fetching jsDelivr:', base + 'plugins.json?' + ts);
-        manifest = JSON.parse(await fetchText(base + 'plugins.json?' + ts));
+                return new TextDecoder('utf-8').decode(bytes);
+            }
+        },
+        {
+            name: 'raw.githubusercontent.com',
+            url: ghRaw(MARKET_OWNER, MARKET_REPO, 'plugins.json') + '?_t=' + Date.now(),
+            decode: async (res) => res.text()
+        },
+        {
+            name: 'jsDelivr CDN',
+            url: ghCdn(MARKET_OWNER, MARKET_REPO) + 'plugins.json?_v=' + Date.now(),
+            decode: async (res) => res.text()
+        }
+    ];
+
+    let manifest = null;
+    const failures = [];
+    for (const a of attempts) {
+        try {
+            console.log('[ExtAddons] 市场取数尝试:', a.name, a.url);
+            const res = await fetch(a.url, {mode: 'cors', cache: 'no-store'});
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const text = await a.decode(res);
+            const parsed = JSON.parse(text);
+            if (!parsed || !Array.isArray(parsed.plugins)) throw new Error('清单里没有 plugins 数组');
+            manifest = parsed;
+            console.log('[ExtAddons] 市场取数成功（' + a.name + '），插件 ' + parsed.plugins.length + ' 个');
+            break;
+        } catch (e) {
+            const msg = (e && e.message) || String(e);
+            failures.push(a.name + ' → ' + msg);
+            console.warn('[ExtAddons] 市场取数失败，换下一条：' + a.name + ' → ' + msg);
+        }
     }
+
+    if (!manifest) {
+        // 把三条通道各自的失败原因都带出去。只说「加载失败」会让人无从下手，
+        // 而「API 403 限流 / CDN 404 / raw 超时」是三种完全不同的处置方式。
+        throw new Error('三条通道都取不到市场清单：' + failures.join('；'));
+    }
+
     const raw = Array.isArray(manifest.plugins) ? manifest.plugins : [];
     console.log('[ExtAddons] plugins count:', raw.length, raw.map(p => (typeof p === 'string' ? p : p.dir || p.id)));
     return raw.map(p => {
@@ -744,6 +808,39 @@ export async function fetchAddonMarketFromTopic(topic) {
 export function removeCustomAddon(id) {
     const existing = loadCustomAddons().map(stripCustomFn);
     saveCustomAddons(existing.filter(e => e.id !== id));
+}
+
+/**
+ * 删除「编辑器数据文件夹」里安装的插件（按**目录名**，不是 id）。
+ *
+ * 浏览器删不了本地目录，所以走后端 `/ext-plugins/remove`。
+ * 随编辑器分发的内置插件由后端直接拒绝，返回 `error: 'builtin'` ——
+ * 这一层判断必须在后端做：前端按钮可以隐藏，但接口不能只靠 UI 守。
+ *
+ * 返回 `{ok, error?, message?}`，不抛异常，让调用方统一处理提示。
+ */
+export async function removeDirPlugin(dirName) {
+    const name = String(dirName == null ? '' : dirName).trim();
+    if (!name) return {ok: false, error: '缺少插件目录名'};
+    try {
+        const res = await fetch('/ext-plugins/remove', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({dir: name})
+        });
+        let data = {};
+        try { data = await res.json(); } catch (e) { /* 非 JSON 响应，下面按状态码报错 */ }
+        if (!res.ok || !data.ok) {
+            return {
+                ok: false,
+                error: (data && data.error) || ('HTTP ' + res.status),
+                message: data && data.message
+            };
+        }
+        return {ok: true, dir: name};
+    } catch (e) {
+        return {ok: false, error: String((e && e.message) || e)};
+    }
 }
 
 
@@ -780,6 +877,15 @@ export async function loadDirPlugins() {
                     dirPlugin: true,
                     dirName: it.dir,
                     dirVersion: it.version || '',
+                    // 随编辑器分发的内置插件：删了也会被下次启动重新铺回来，
+                    // 所以列表里要据此禁掉删除入口（后端也会再拒一次）。
+                    dirBundled: !!it.bundled,
+                    // 关键：目录插件不是「自定义插件」，要显式摘掉 custom。
+                    // evalAddonText() 会给它编译出来的每个插件打上 custom: true，
+                    // 而 custom 一为真，界面就会渲染「来自：本地文件」和走
+                    // localStorage 的那套删除/更新按钮 —— 对一个磁盘目录毫无作用，
+                    // 点了只会看起来「删除没反应」。目录插件的增删走 dirPlugin 那条路。
+                    custom: false,
                     serverOnly: true,
                     hasServer: !!it.hasServer
                 });
@@ -792,6 +898,11 @@ export async function loadDirPlugins() {
                         dirPlugin: true,
                         dirName: it.dir,
                         dirVersion: it.version || '',
+                        dirBundled: !!it.bundled,
+                        // 同 serverOnly 分支：目录插件不是自定义插件，
+                        // 必须把 evalAddonText 打上的 custom: true 摘掉，
+                        // 否则会多出一对无效的「删除 / 更新」按钮。
+                        custom: false,
                         hasServer: !!it.hasServer
                     }));
                 }

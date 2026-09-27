@@ -27,7 +27,7 @@ import {buildSyncUrl, parseSyncPayload, importSyncPayload} from '../lib/sync.js'
 import {
     cloudAvailable, cloudSearchUsers, cloudListRelations, cloudFollow, cloudUnfollow
 } from '../lib/cloud.js';
-import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, loadDirPlugins, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
+import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, removeDirPlugin, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, loadDirPlugins, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
 import {installVoiceInput} from '../lib/voice-input.js';
 import {openAskBar} from '../lib/ai-ask-bar.js';
 import {LEGAL_DOCS} from '../lib/legal-docs.js';
@@ -387,6 +387,17 @@ const ExtensionBuilderInner = () => {
     const [showAddonsPanel, setShowAddonsPanel] = useState(false);
     const [addonState, setAddonStateInternal] = useState(() => getAddonState());
     const [addonSearch, setAddonSearch] = useState('');
+    /**
+     * 插件列表的刷新计数器。
+     *
+     * getAllAddons() 读的是 ext-addons.js 里的模块级数组（_dirPlugins），
+     * 不是 React state —— 删除一个目录插件后，模块级数据变了，但 React
+     * 不知道要重渲染，列表里那一行会赖着不走。改这个计数器来强制刷新。
+     */
+    const [addonListVersion, setAddonListVersion] = useState(0);
+    // 列表数据来自模块级数组，不是 state，所以用 useMemo 显式依赖上面的计数器，
+    // 让「删除后重新拉清单」能真正反映到界面上。
+    const addonList = useMemo(() => getAllAddons(), [addonListVersion]);
     // 安装插件对话框（对齐 DSH 的 dsh plugin add）
     const [showInstallModal, setShowInstallModal] = useState(false);
     const [installSource, setInstallSource] = useState('');
@@ -1729,10 +1740,16 @@ const ExtensionBuilderInner = () => {
         // 浏览器读不了本地目录，所以这一步是向 Node 侧要清单；接口不存在就静默跳过。
         loadDirPlugins()
             .catch(() => [])
-            .then(() => applyExtAddons({
-                Blockly,
-                getWorkspace: () => workspaceRef.current
-            })).then(cleanup => {
+            .then(() => {
+                // 目录插件是异步扫出来的：这一步完成后 _dirPlugins 才有内容。
+                // addonList 是 useMemo，不刷新计数器它就停在挂载时的快照上，
+                // 结果就是「磁盘上明明装了插件，列表里却不显示」。
+                setAddonListVersion(v => v + 1);
+                return applyExtAddons({
+                    Blockly,
+                    getWorkspace: () => workspaceRef.current
+                });
+            }).then(cleanup => {
             if (!cancelled) extAddonsCleanupRef.current = cleanup;
         }).catch(e => console.warn('[ExtAddons] 激活失败:', e));
         return () => {
@@ -3893,6 +3910,10 @@ const ExtensionBuilderInner = () => {
     }, [addonState]);
 
     // 重新激活所有插件（导入/更新/删除后调用）
+    // 注意：必须定义在下面 handleRemoveDirPlugin 之前 —— 后者把它写进了
+    // useCallback 的依赖数组，而依赖数组是在渲染时立即求值的。
+    // 若把 reapplyAddons 放在后面，求值时会踩到 const 的暂时性死区（TDZ），
+    // 直接抛 ReferenceError 让整个面板白屏。
     const reapplyAddons = useCallback(() => {
         const Blockly = window._extBuilderBlockly || window.Blockly;
         if (!Blockly || !workspaceRef.current) return;
@@ -3903,6 +3924,47 @@ const ExtensionBuilderInner = () => {
         applyExtAddons({Blockly, getWorkspace: () => workspaceRef.current})
             .then(cleanup => { extAddonsCleanupRef.current = cleanup; });
     }, []);
+
+    /**
+     * ExtAddons：删除「编辑器数据文件夹」里安装的插件（按目录名）。
+     *
+     * 和上面的自定义插件删除是两条不同的路：
+     *   - custom：插件源码存在 localStorage 里，前端自己删；
+     *   - dirPlugin：插件是磁盘上的一个目录，只能请后端删。
+     *
+     * 内置（随编辑器分发）的插件在界面上就不给按钮，后端还会再拒一次 ——
+     * 因为删了也会被下次启动的 deployBundled() 铺回来，做这件事只会让人困惑。
+     */
+    const handleRemoveDirPlugin = useCallback(async (addon) => {
+        const dirName = addon.dirName || addon.id;
+        const label = addon.name || dirName;
+        if (!confirm('确定删除插件「' + label + '」？\n\n会连同它的目录一起删掉，此操作不可撤销。')) return;
+        try {
+            const out = await removeDirPlugin(dirName);
+            if (!out.ok) {
+                if (out.error === 'builtin') {
+                    alert(out.message || '这是随编辑器分发的内置插件，不能删除。');
+                } else {
+                    alert('删除失败：' + (out.message || out.error || '未知错误'));
+                }
+                return;
+            }
+            // 已启用的话先停用，避免它的 setup 残留（比如改过的原型、挂上的监听）。
+            const nextState = {...addonState};
+            if (nextState[addon.id]) {
+                delete nextState[addon.id];
+                setAddonState(nextState);
+                setAddonStateInternal(nextState);
+            }
+            // 重新拉一次清单：_dirPlugins 是模块级数组，得让它和后端磁盘对齐，
+            // 再用 addonListVersion 触发重渲染，否则删掉的那行会留在列表里。
+            await loadDirPlugins().catch(() => []);
+            setAddonListVersion(v => v + 1);
+            reapplyAddons();
+        } catch (e) {
+            alert('删除失败：' + (e && e.message ? e.message : String(e)));
+        }
+    }, [addonState, reapplyAddons]);
 
     // 安装面板拖动
     const handleInstallDragStart = useCallback((e) => {
@@ -4043,6 +4105,12 @@ const ExtensionBuilderInner = () => {
         try {
             const list = await fetchAddonMarketFromTopic(MARKET_TOPIC);
             console.log('[ExtAddons] 市场返回', list.length, '个插件:', list.map(p => p.dir));
+            if (!list.length) {
+                // 仓库通了但清单是空的。这和「拉取失败」是两回事：
+                // 前者要去补 plugins.json，后者要查网络 / CDN。分开提示。
+                setMarketError('市场清单是空的：仓库能访问，但 plugins.json 里没有插件条目。');
+                return;
+            }
             setMarketList(list);
             // 标记已安装（按 source 匹配已装自定义插件）
             const installed = {};
@@ -5835,7 +5903,7 @@ const ExtensionBuilderInner = () => {
                                     />
                                 </div>
                                 <div className="ext-addons-list">
-                                    {getAllAddons()
+                                    {addonList
                                         .filter(addon => {
                                             if (!addonSearch.trim()) return true;
                                             const q = addonSearch.trim().toLowerCase();
@@ -5869,6 +5937,24 @@ const ExtensionBuilderInner = () => {
                                                         onClick={() => handleRemoveCustomAddon(addon.id)}
                                                     >删除</button>
                                                 )}
+                                                {/* 数据目录插件：删的是磁盘上的目录，走后端。
+                                                    内置的（随编辑器分发）不给按钮 —— 删了下次启动会被
+                                                    deployBundled() 铺回来，后端也会拒，见 removePlugin()。 */}
+                                                {addon.dirPlugin && !addon.dirBundled && (
+                                                    <button
+                                                        type="button"
+                                                        className="ext-addon-del"
+                                                        title="删除此插件（会连同它的目录一起删掉）"
+                                                        aria-label="删除插件"
+                                                        onClick={() => handleRemoveDirPlugin(addon)}
+                                                    >删除</button>
+                                                )}
+                                                {addon.dirPlugin && addon.dirBundled && (
+                                                    <span
+                                                        className="ext-addon-del-locked"
+                                                        title="随编辑器分发的内置插件，不能删除"
+                                                    >内置·不可删</span>
+                                                )}
                                                 {addon.custom && addon.source && (
                                                     <button
                                                         type="button"
@@ -5897,7 +5983,7 @@ const ExtensionBuilderInner = () => {
                                             )}
                                         </div>
                                     ))}
-                                    {getAllAddons().filter(addon => {
+                                    {addonList.filter(addon => {
                                         if (!addonSearch.trim()) return true;
                                         const q = addonSearch.trim().toLowerCase();
                                         return addon.name.toLowerCase().indexOf(q) >= 0 ||

@@ -73,6 +73,33 @@ function createServer() {
         return;
       }
 
+      // 删除插件目录。内置（随编辑器分发）的会被运行时拒绝，见 removePlugin()。
+      if (urlPath === '/ext-plugins/remove' && req.method === 'POST') {
+        let raw = '';
+        req.on('data', (c) => {
+          raw += c;
+          if (raw.length > 8192) req.destroy();
+        });
+        req.on('end', () => {
+          let dir = '';
+          try { dir = (JSON.parse(raw || '{}') || {}).dir || ''; } catch (e) { /* 下面统一报错 */ }
+          if (!dir) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ ok: false, error: '缺少 dir 参数' }));
+            return;
+          }
+          let out;
+          try {
+            out = pluginRuntime.removePlugin(dir);
+          } catch (e) {
+            out = { ok: false, error: String((e && e.message) || e) };
+          }
+          res.writeHead(out.ok ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(out));
+        });
+        return;
+      }
+
       // 路由表里的前缀是插件自报的完整路径（如 /deepseek-web-vision/api），
       // 命中就整段透传，插件子进程自己解析剩余部分。
       const pluginPort = pluginRuntime.portFor(urlPath);

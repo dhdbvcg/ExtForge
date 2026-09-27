@@ -2055,6 +2055,23 @@
     border-color: #e58aa0;
 }
 
+/* 内置插件（随编辑器分发）的删除位：显示成灰色只读标记而不是按钮。
+   它删了也会被下次启动重新铺回来，所以这里明确表达「不可删」，
+   而不是给个按钮再弹窗拒绝。 */
+:global(.ext-addon-del-locked) {
+    font-size: 10px;
+    color: #98a2b3;
+    background: #f2f4f7;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    padding: 1px 7px;
+    margin-left: 6px;
+    cursor: not-allowed;
+    vertical-align: middle;
+    line-height: 1.4;
+    user-select: none;
+}
+
 /* 子选项区域 */
 :global(.ext-addon-opts) {
     margin-top: 6px;

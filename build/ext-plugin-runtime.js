@@ -97,6 +97,10 @@ module.exports = function createPluginRuntime(opts) {
             } catch (e) { /* 清单坏了不影响加载，回退目录名 */ }
             const id = manifest.id || name;
             const rec = running.get(id);
+            // 是否随编辑器分发（bundledDir 里有同名目录）。
+            // 这类插件删了也没用 —— 下次启动 deployBundled() 会原样铺回来，
+            // 所以界面要据此禁掉删除按钮，而不是让用户删完发现它又回来了。
+            const bundled = !!(bundledDir && fs.existsSync(path.join(bundledDir, name)));
             out.push({
                 id,
                 dir: name,
@@ -106,6 +110,7 @@ module.exports = function createPluginRuntime(opts) {
                 version: manifest.version || '',
                 author: manifest.author || '',
                 hasServer,
+                bundled,
                 running: !!rec,
                 port: rec ? rec.port : 0,
                 routes: rec ? rec.routes : [],
@@ -231,6 +236,64 @@ module.exports = function createPluginRuntime(opts) {
         return deployed;
     }
 
+    /**
+     * 删掉一个插件目录。
+     *
+     * 拒绝删除随编辑器分发的内置插件：它们的源头在 bundledDir 里，
+     * 删掉用户目录这份只会在下次启动时被 deployBundled() 铺回来，
+     * 用户会以为「删除没生效」。与其做一件注定被撤销的事，不如明确拒绝。
+     *
+     * 删除前必须先把子进程杀掉 —— Windows 下「某目录是活进程的 cwd」
+     * 或者被进程打开的文件都会锁住目录，直接 rm 会报 EPERM。
+     * 即使杀了进程，句柄释放也有延迟，所以带重试。
+     */
+    function removePlugin(dir) {
+        const name = String(dir || '').replace(/[\\/]+$/, '');
+        // 防目录穿越：只允许删 pluginsDir 的直接子目录
+        if (!name || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name === '.' || name === '..') {
+            return {ok: false, error: '非法的插件目录名：' + dir};
+        }
+        const target = path.join(pluginsDir, name);
+        if (path.resolve(path.dirname(target)) !== path.resolve(pluginsDir)) {
+            return {ok: false, error: '目录不在插件目录内' };
+        }
+        if (!fs.existsSync(target)) return {ok: false, error: '插件目录不存在' };
+        if (bundledDir && fs.existsSync(path.join(bundledDir, name))) {
+            return {ok: false, error: 'builtin', message: '这是随编辑器分发的内置插件，不能删除。' };
+        }
+
+        // 先停掉它的 Node 服务：running 的 key 是插件 id（可能来自 plugin.json），
+        // 而这里拿到的是目录名，所以要回扫一遍匹配 dir。
+        for (const [pid, rec] of Array.from(running.entries())) {
+            let recDir = pid;
+            try {
+                const mf = path.join(pluginsDir, pid, 'plugin.json');
+                if (fs.existsSync(mf)) recDir = pid;
+            } catch (e) { /* 用 id 兜底 */ }
+            // listPlugins 的 id 与 dir 多数相同；两个都试，命中即杀
+            if (recDir === name || pid === name) {
+                try { rec.proc.kill(); } catch (e) { /* ignore */ }
+                running.delete(pid);
+                rebuildRouteTable();
+            }
+        }
+
+        let lastErr = null;
+        for (let i = 0; i < 5; i++) {
+            try {
+                fs.rmSync(target, {recursive: true, force: true, maxRetries: 3, retryDelay: 150});
+                log('[ext-plugins] 已删除插件目录: ' + name);
+                return {ok: true, dir: name};
+            } catch (e) {
+                lastErr = e;
+                // 句柄释放有延迟，等一下再试
+                const until = Date.now() + 250;
+                while (Date.now() < until) { /* spin */ }
+            }
+        }
+        return {ok: false, error: (lastErr && lastErr.code) || String(lastErr && lastErr.message || lastErr)};
+    }
+
     /** 启动所有带 Node 侧服务的插件。可重复调用（已在跑的会跳过）。 */
     function start() {
         // 先把内置插件铺到用户目录，再扫描 —— 否则首次启动扫到的是空目录。
@@ -260,6 +323,7 @@ module.exports = function createPluginRuntime(opts) {
         dataDir,
         bundledDir,
         listPlugins,
+        removePlugin,
         deployBundled,
         start,
         dispose,

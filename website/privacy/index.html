@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<script>try{var t=localStorage.getItem('see-theme');if(!t)t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<title>隐私政策 — Scratch 扩展编辑器</title>
+<style>
+  :root {
+    --bg: #070711; --bg-2: #0c0c1a;
+    --ink: #eef0fb; --ink-dim: #a6a8c4; --ink-faint: #6c6f93;
+    --glass: rgba(255,255,255,0.045); --glass-brd: rgba(255,255,255,0.10);
+    --grad: linear-gradient(115deg, #8b5cf6 0%, #22d3ee 48%, #f472b6 100%);
+    --shadow: 0 24px 70px -28px rgba(0,0,0,0.85);
+    --r-lg: 22px; --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  }
+  [data-theme="light"] {
+    --bg: #f4f5fb; --bg-2: #ffffff;
+    --ink: #1a1c2e; --ink-dim: #4a4d6b; --ink-faint: #8a8da8;
+    --glass: rgba(0,0,0,0.035); --glass-brd: rgba(0,0,0,0.08);
+    --shadow: 0 24px 70px -28px rgba(30, 30, 80, 0.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; background: var(--bg); color: var(--ink);
+    font-family: var(--font); padding: 32px 20px 64px; line-height: 1.8;
+  }
+  .bg-fx {
+    position: fixed; inset: 0; z-index: -1; overflow: hidden;
+    background:
+      radial-gradient(45% 42% at 14% 18%, rgba(139,92,246,.15), transparent 60%),
+      radial-gradient(40% 38% at 84% 22%, rgba(34,211,238,.12), transparent 60%),
+      radial-gradient(48% 46% at 72% 82%, rgba(244,114,182,.10), transparent 62%);
+  }
+  .wrap { width: 760px; max-width: 100%; margin: 0 auto; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; gap: 12px; flex-wrap: wrap;
+  }
+  .top a { text-decoration: none; color: var(--ink-dim); font-size: 13px; transition: color .15s; }
+  .top a:hover { color: var(--ink); }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--glass-brd);
+    border-radius: var(--r-lg); box-shadow: var(--shadow), 0 0 80px rgba(139,92,246,.10);
+    padding: 34px 38px 40px;
+  }
+  h1 { font-size: 25px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 6px; }
+  .updated { font-size: 13px; color: var(--ink-faint); margin-bottom: 22px; }
+  .intro {
+    font-size: 14.5px; color: var(--ink-dim);
+    background: var(--glass); border-left: 3px solid #22d3ee;
+    border-radius: 0 10px 10px 0; padding: 14px 18px; margin-bottom: 26px;
+  }
+  .sec { margin-bottom: 24px; }
+  .sec h2 {
+    font-size: 16px; font-weight: 700; margin-bottom: 8px;
+    background: var(--grad); -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: #8b5cf6;
+  }
+  .sec p { font-size: 14px; color: var(--ink-dim); margin-bottom: 8px; }
+  .sec p:last-child { margin-bottom: 0; }
+  .foot {
+    margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--glass-brd);
+    font-size: 13px; color: var(--ink-faint); display: flex; gap: 16px; flex-wrap: wrap;
+  }
+  .foot a { color: #8b5cf6; text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+  <div class="top">
+    <a href="../login/">&larr; 返回登录</a>
+    <a href="../index.html">首页</a>
+  </div>
+
+  <div class="card">
+    <h1>隐私政策</h1>
+    <div class="updated">更新日期：2026-09-27</div>
+
+    <p class="intro">本政策说明 Scratch 扩展编辑器会收集哪些信息、如何使用与保存它们，以及你可以怎样管理这些信息。我们的原则是：只收集让服务正常运转所必需的最少信息。</p>
+
+    <div class="sec">
+      <h2>一、我们收集的信息</h2>
+      <p>登录信息：当你通过 GitHub 登录时，我们会获得你的 GitHub 用户 ID、用户名、昵称、头像地址，以及主邮箱地址。这些信息来自 GitHub 的公开接口，我们不接触你的 GitHub 密码。</p>
+      <p>账号标识：为区分不同用户，我们会为你的账号生成一个内部编号（uid），并保存它与用户名的对应关系。</p>
+      <p>存档内容：仅当你主动使用「存档」「云同步」等功能时，你当前项目的扩展配置与代码才会被上传保存。</p>
+      <p>运行信息：页面加载时的必要技术信息可能被用于排查故障，不含用于广告追踪的标识符。</p>
+    </div>
+
+    <div class="sec">
+      <h2>二、我们不收集的信息</h2>
+      <p>你的 GitHub 密码、二次验证码，以及任何你未授权的仓库内容；</p>
+      <p>你未主动上传的本地作品内容；</p>
+      <p>用于广告投放或跨站行为分析的个人标识符。</p>
+    </div>
+
+    <div class="sec">
+      <h2>三、信息如何被使用</h2>
+      <p>用于识别你的身份，让你在不同设备上访问自己的存档；</p>
+      <p>用于展示你的昵称与头像，以及在你使用好友、关注等功能时建立账号之间的关联；</p>
+      <p>用于定位与修复服务故障，以及防范滥用行为。</p>
+      <p>我们不会将你的个人信息出售、出租给第三方，也不会用于与服务无关的用途。</p>
+    </div>
+
+    <div class="sec">
+      <h2>四、信息存储在哪里</h2>
+      <p>登录会话保存在你浏览器的 localStorage 中（键名 extbuilder_session），用于维持登录状态；退出登录或清除浏览器数据即可移除。</p>
+      <p>你主动上传的存档与账号资料，保存在 Cloudflare 提供的边缘存储（KV）中，用于跨设备访问。</p>
+      <p>登录过程中与 GitHub 的通信由 GitHub 处理，我们仅接收授权结果，不中转你的凭据。</p>
+    </div>
+
+    <div class="sec">
+      <h2>五、信息的共享</h2>
+      <p>除下列情形外，我们不会向第三方提供你的个人信息：</p>
+      <p>· 你主动公开的内容（如公开的个人资料页、昵称与头像）；</p>
+      <p>· 为完成登录而必须与 GitHub 交换的授权信息；</p>
+      <p>· 法律法规要求或司法机关依法定程序要求提供。</p>
+    </div>
+
+    <div class="sec">
+      <h2>六、你的权利</h2>
+      <p>你可以随时在编辑器内退出登录，清除本机保存的会话；</p>
+      <p>你可以清除浏览器中本站的数据，从而删除本机保存的全部会话与草稿；</p>
+      <p>你可以要求删除账号及云端存档 —— 通过项目仓库的 Issue 提出即可，我们会在核实身份后处理。</p>
+    </div>
+
+    <div class="sec">
+      <h2>七、未成年人</h2>
+      <p>本服务面向能够独立承担相应责任的用户。若你未满法定年龄，请在监护人指导下使用，并由监护人阅读并同意本政策。</p>
+    </div>
+
+    <div class="sec">
+      <h2>八、政策更新</h2>
+      <p>本政策可能随功能调整而更新，更新后的版本公布并同步更新顶部日期。若涉及收集范围的实质性扩大，我们会以更显著的方式提示。</p>
+      <p>对本政策有疑问，可通过项目仓库的 Issue 与我们联系。</p>
+    </div>
+
+    <div class="foot">
+      <a href="../terms/">用户协议</a>
+      <a href="../login/">返回登录</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

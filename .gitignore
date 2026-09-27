@@ -39,6 +39,10 @@ npm-*
 !/build/main.js
 !/build/package.json
 !/build/installer.nsh
+# 插件运行时与内置插件：build/ 里手写的源（不是 electron-builder 的产物），
+# 打包时必须一起带上，否则 exe 起来后 require('./ext-plugin-runtime') 直接失败。
+!/build/ext-plugin-runtime.js
+!/build/plugins-src/
 
 # ── 开源发布前的保密/大文件规则 ──
 
@@ -57,3 +61,16 @@ npm-*
 /installer_out
 /nul
 Thumbs.db
+
+# ── 体积超限 / 本地临时产物 ──
+
+# 语音识别打包产物（单文件 161MB，超过 GitHub 100MB 硬上限；
+# 需要时按 README「语音输入」章节自行获取）
+/voice-web-pkg
+
+# 本地开发日志
+/devserver.log
+/devserver.err.log
+
+# 编辑器里手工留下的样式备份
+*.css.keep

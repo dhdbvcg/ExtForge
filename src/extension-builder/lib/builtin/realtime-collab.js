@@ -1914,7 +1914,14 @@ export default {
 
         // 监听来自 React 工具下拉菜单的自定义事件
         window.addEventListener('ext-toggle-realtime-collab', togglePanel);
-        registerDisposer(() => window.removeEventListener('ext-toggle-realtime-collab', togglePanel));
+        // 插件系统提供的注册 API 是 ctx.effect(disposer)（见 ext-addons.js
+        // 的 makeAddonCtx）。早期这里直接调用未定义的 registerDisposer，
+        // 每次激活都抛 ReferenceError 并中断整个 setup，面板/菜单全部不可用。
+        // 这里再加一层存在性判断：ctx 形状若变动，最多是少注册一个清理回调，
+        // 而不是让整个插件初始化崩掉。
+        if (typeof effect === 'function') {
+            effect(() => window.removeEventListener('ext-toggle-realtime-collab', togglePanel));
+        }
 
         let triggerBtn = null;
         const toolsBtn = Array.from(document.querySelectorAll('button, [role=button], .ext-menu-btn, [class*="menu"]'))

@@ -96,47 +96,7 @@
     overflow: hidden;
 }
 
-/* ---- Tab bar (matches TurboWarp's 代码/造型/声音 tabs) ---- */
-
-:global(.ext-builder-tabs) {
-    display: flex;
-    align-items: stretch;
-    background: #f7f7f7;
-    border-bottom: 1px solid #d0d0d0;
-    padding: 0;
-    height: 36px;
-    flex-shrink: 0;
-}
-
-:global(.ext-tab) {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 20px;
-    background: transparent;
-    color: #555;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-:global(.ext-tab:hover) {
-    background: #e8e8e8;
-    color: #1a1a1a;
-}
-
-:global(.ext-tab.active) {
-    color: #4c97ff;
-    border-bottom-color: #4c97ff;
-    background: #ffffff;
-}
-
-:global(.ext-tab-icon) {
-    font-size: 14px;
-}
+/* 标签栏（代码 / 调试器）已移除：右侧代码面板常驻，调试器入口在「编辑」下拉菜单。 */
 
 /* ---- Main Layout (2-column: workspace | stage) ---- */
 
@@ -151,17 +111,15 @@
 /* ---- Floating block builder window ---- */
 
 :global(.ext-builder-modal-backdrop) {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: transparent;
-    z-index: 99999;
-    /* Do NOT block mouse events — the Blockly workspace behind must stay
-       fully interactive (drag blocks, click flyout, etc.) while the
-       builder window is open. Closing happens via ✕ / Esc instead. */
-    pointer-events: none;
+    /* 打开「制作积木」时唯一新增的全屏层。
+       历史实现是 position: fixed + inset: 0 + z-index: 99999，
+       它不承担任何交互（背景透明、pointer-events: none、无点击外部
+       关闭逻辑），但作为高层级全屏 fixed 元素会盖在主工作区之上，
+       在部分浏览器/合成路径下会让左侧积木工具箱（分类栏 + flyout）
+       看起来被隐藏或不再重绘。
+       改为 display: contents：该节点不生成盒子、不参与层叠，
+       子元素（悬浮窗本身是 position: fixed）的定位完全不受影响。 */
+    display: contents;
 }
 
 :global(.ext-builder-modal) {
@@ -1367,13 +1325,21 @@
     font-style: italic;
 }
 
+/* 离屏渲染宿主：必须有真实尺寸！
+   Blockly.inject 会读取容器尺寸来决定 SVG 视口，曾经这里写的是
+   width/height: 1px，导致面板内的「积木预览」永远渲染失败（抛异常被
+   renderCustomBlockToSvg 的 catch 吞掉，返回空串，界面一直显示
+   「编辑字段以预览积木」）。改为大尺寸 + visibility:hidden：
+   布局盒仍然参与计算（offsetWidth 有效），但用户看不见。 */
 :global(.ext-block-editor-preview-host) {
     position: absolute;
-    width: 1px;
-    height: 1px;
+    width: 1600px;
+    height: 1200px;
     overflow: hidden;
-    left: -9999px;
-    top: -9999px;
+    left: -10000px;
+    top: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 :global(.ext-block-editor-meta) {
@@ -1757,6 +1723,229 @@
     flex-direction: column;
     overflow: hidden;
 }
+
+/* ---- GitHub Device Flow 授权弹窗 ---- */
+/* 复用 .ext-auth-backdrop / .ext-auth-card / .ext-auth-header / .ext-auth-title
+   / .ext-auth-btn / .ext-auth-error，这里只补设备码与步骤部分。 */
+
+:global(.ext-device-card) {
+    width: 420px;
+}
+
+:global(.ext-device-body) {
+    padding: 16px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+}
+
+:global(.ext-device-hint) {
+    font-size: 13px;
+    line-height: 1.65;
+    color: #4a5568;
+}
+
+/* 用户码：等宽、放大、字距拉开，方便逐位抄写 */
+:global(.ext-device-code-row) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+:global(.ext-device-code) {
+    flex: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #0d1117;
+    background: #f2f5f9;
+    border: 1px dashed #b9c4d2;
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+    user-select: all;
+}
+
+:global(.ext-device-copy) {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a73e8;
+    background: #eef4fe;
+    border: 1px solid #c7dcfb;
+    border-radius: 6px;
+    cursor: pointer;
+}
+:global(.ext-device-copy:hover) { background: #ddeafd; }
+
+:global(.ext-device-steps) {
+    font-size: 12px;
+    color: #5f6368;
+    line-height: 1.7;
+}
+:global(.ext-device-steps ol) {
+    margin: 0;
+    padding-left: 18px;
+}
+:global(.ext-device-steps code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    background: #f1f3f4;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+:global(.ext-device-waiting) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #5f6368;
+}
+
+:global(.ext-device-spinner) {
+    width: 13px;
+    height: 13px;
+    border: 2px solid #d2d9e2;
+    border-top-color: #1a73e8;
+    border-radius: 50%;
+    animation: ext-device-spin .8s linear infinite;
+}
+
+@keyframes ext-device-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---- 用户协议 / 隐私政策弹窗 ---- */
+
+:global(.ext-legal-backdrop) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    /* 必须高于授权弹窗（.ext-auth-backdrop 的 900），否则从授权弹窗里
+       点《用户协议》会被压在下面看不见。 */
+    z-index: 960;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+:global(.ext-legal-card) {
+    width: 620px;
+    max-width: 94vw;
+    max-height: 84vh;
+    background: #ffffff;
+    color: #1a1a1a;
+    border-radius: 10px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+:global(.ext-legal-body) {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 24px 22px;
+    line-height: 1.75;
+}
+
+:global(.ext-legal-meta) {
+    font-size: 12px;
+    color: #8895a4;
+    margin-bottom: 10px;
+}
+
+:global(.ext-legal-intro) {
+    font-size: 13.5px;
+    color: #2c3e50;
+    background: #f6f8fb;
+    border-left: 3px solid #4c97ff;
+    border-radius: 0 6px 6px 0;
+    padding: 10px 14px;
+    margin: 0 0 16px;
+}
+
+:global(.ext-legal-section) {
+    margin-bottom: 16px;
+}
+
+:global(.ext-legal-h) {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 7px;
+}
+
+:global(.ext-legal-p) {
+    font-size: 13px;
+    color: #4a5568;
+    margin: 0 0 7px;
+}
+
+:global(.ext-legal-actions) {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 24px;
+    border-top: 1px solid #e8eaed;
+    background: #fafbfc;
+    flex-shrink: 0;
+}
+
+:global(.ext-legal-agree) {
+    padding: 9px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #4c97ff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+}
+:global(.ext-legal-agree:hover) { background: #3d82e0; }
+
+:global(.ext-legal-close) {
+    padding: 9px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4a5568;
+    background: #fff;
+    border: 1px solid #d5dbe3;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+}
+:global(.ext-legal-close:hover) { background: #f1f3f5; }
+
+/* 授权弹窗底部的条款回看入口 */
+:global(.ext-legal-foot) {
+    font-size: 12px;
+    color: #8895a4;
+    text-align: center;
+    line-height: 1.7;
+}
+
+/* 条款内联链接：伪装成正文里的链接，不是按钮 */
+:global(.ext-legal-link) {
+    padding: 0 1px;
+    font-size: inherit;
+    font-family: inherit;
+    color: #1a73e8;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+:global(.ext-legal-link:hover) { color: #0b57d0; }
 
 /* ---- 插件设置弹窗（ExtAddons） ---- */
 
@@ -3303,34 +3492,59 @@
     min-height: 0;
     overflow-y: auto;
 }
-/* 标签页栏 */
-:global(.ext-settings-tabs) {
+/* 主体：左侧竖排标签栏 + 右侧内容面板 */
+:global(.ext-settings-body) {
     display: flex;
-    gap: 0;
-    border-bottom: 2px solid #e8e8e8;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+:global(.ext-settings-sidebar) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+    width: 132px;
+    box-sizing: border-box;
+    padding: 10px 8px;
     background: #f4f5f7;
-    padding: 0 16px;
+    border-right: 1px solid #e8e8e8;
+    overflow-y: auto;
+}
+:global(.ext-settings-panes) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 :global(.ext-settings-tab) {
-    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
     border: none;
+    border-radius: 7px;
     background: transparent;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
-    color: #666;
+    color: #5f6368;
     cursor: pointer;
-    position: relative;
+    text-align: left;
+    white-space: nowrap;
     transition: color .15s, background .15s;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
 }
 :global(.ext-settings-tab:hover) {
-    color: #333;
-    background: rgba(0,0,0,.04);
+    color: #202124;
+    background: rgba(0,0,0,.05);
 }
 :global(.ext-settings-tab.active) {
     color: #1a73e8;
-    border-bottom-color: #1a73e8;
+    background: #e8f0fe;
     font-weight: 600;
 }
 /* 标签页内容区 */
@@ -3691,3 +3905,206 @@
 :global(.ext-install-tool-btn:hover) { background: #f0f0f0; }
 :global(.ext-install-tool-btn:disabled) { opacity: .4; cursor: not-allowed; }
 
+/* ============================================================
+   调试器面板（DebuggerPanel.jsx）—— Data URI 启动器
+
+   整个面板只有一件事：把生成的扩展源码编码成 Data URI，拼进在线
+   编辑器的 ?extension= 参数，打开即加载。不经过服务器、不需要公网直链。
+   ============================================================ */
+
+/* 调试器悬浮框：沿用 .ext-float-panel 的拖动/最大化骨架，只是内容是一张卡片 */
+:global(.ext-debugger-panel) {
+    min-width: 340px;
+    min-height: 260px;
+}
+:global(.ext-debugger-panel .ext-float-body) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+:global(.ext-launch-root) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background: #f7f8fa;
+    padding: 12px;
+    font-size: 12px;
+    color: #1a1a1a;
+}
+
+:global(.ext-launch-card) {
+    background: #fff;
+    border: 1px solid #e2e6ec;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+:global(.ext-launch-title) {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+:global(.ext-launch-sub) {
+    margin-top: 3px;
+    font-size: 10px;
+    line-height: 1.6;
+    color: #7a8fa6;
+}
+
+/* ---- 元信息网格：扩展名 / id / 积木数 / 代码大小 / 链接长度 ---- */
+
+:global(.ext-launch-meta) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    padding: 8px;
+    background: #f7f8fa;
+    border-radius: 4px;
+}
+
+:global(.ext-launch-meta-item) {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+:global(.ext-launch-meta-label) {
+    font-size: 9px;
+    color: #9aa7b5;
+}
+
+:global(.ext-launch-meta-value) {
+    font-size: 11px;
+    font-weight: 600;
+    color: #2c3e50;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+:global(.ext-launch-meta-value.is-warn) { color: #d9822b; }
+
+/* 「原始大小 → 瘦身后大小」的次要说明，跟在主数值后面 */
+:global(.ext-launch-meta-sub) {
+    font-weight: 400;
+    font-size: 9px;
+    color: #8895a4;
+}
+
+/* ---- 主操作按钮 ---- */
+
+:global(.ext-launch-go) {
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 4px;
+    background: #4c97ff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+:global(.ext-launch-go:hover:not(:disabled)) { background: #3d84e8; }
+:global(.ext-launch-go:disabled) { opacity: .45; cursor: not-allowed; }
+
+:global(.ext-launch-row) {
+    display: flex;
+    gap: 5px;
+}
+
+:global(.ext-launch-btn) {
+    flex: 1;
+    padding: 6px 4px;
+    border: 1px solid #d5dbe3;
+    border-radius: 4px;
+    background: #fff;
+    color: #3c4a5a;
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+:global(.ext-launch-btn:hover:not(:disabled)) { background: #f0f4f9; }
+:global(.ext-launch-btn:disabled) { opacity: .45; cursor: not-allowed; }
+
+/* ---- 目标编辑器选择 ---- */
+
+:global(.ext-launch-field) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+:global(.ext-launch-field-label) {
+    font-size: 10px;
+    color: #7a8fa6;
+    flex-shrink: 0;
+}
+
+:global(.ext-launch-select),
+:global(.ext-launch-input) {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 6px;
+    border: 1px solid #d5dbe3;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    color: #1a1a1a;
+}
+:global(.ext-launch-input) { flex-basis: 100%; }
+:global(.ext-launch-select:focus),
+:global(.ext-launch-input:focus) {
+    outline: none;
+    border-color: #4c97ff;
+}
+
+/* ---- 链接预览（等宽、右对齐显示尾部，方便看清 Data URI 前缀）---- */
+
+:global(.ext-launch-url) {
+    padding: 6px;
+    border: 1px solid #e2e6ec;
+    border-radius: 4px;
+    background: #fbfcfd;
+    font-size: 9px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #8895a4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+
+:global(.ext-launch-empty) {
+    padding: 8px;
+    border: 1px dashed #d5dbe3;
+    border-radius: 4px;
+    background: #fbfcfd;
+    font-size: 11px;
+    color: #8895a4;
+    text-align: center;
+}
+
+:global(.ext-launch-hint) {
+    font-size: 10px;
+    line-height: 1.6;
+    color: #8895a4;
+}
+:global(.ext-launch-hint code) {
+    padding: 1px 3px;
+    border-radius: 2px;
+    background: #eef2f7;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 9px;
+    color: #5a6b7d;
+}
+
+:global(.ext-launch-warn) {
+    color: #d9822b;
+}

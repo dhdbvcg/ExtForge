@@ -15,7 +15,10 @@ import {
 } from '../lib/block-definitions.js';
 import {applyZhTranslations} from '../lib/scratch-blocks-zh.js';
 import {EXT_FORGE_RUNTIME, withUtilInjection} from '../lib/extforge-runtime.js';
-import {getSession, login, register, logout as authLogout, getUserMeta, savePrevSession, getPrevSession, clearPrevSession, switchToPrevSession, sendEmailCode, verifyEmailCode, clearLocalAuthData, buildGitHubAuthUrl, loginWithGitHub, makeGitHubState, getRegisteredAccounts, switchToAccount, ensureSiteAccount} from '../lib/auth.js';
+// 登录只走 GitHub Device Flow：全程在页面内完成，不用 authorize 重定向，
+// 也就不需要 buildGitHubAuthUrl / makeGitHubState。用户名/密码与邮箱验证码
+// 相关的 login / register / sendEmailCode / verifyEmailCode 同样已不再引用。
+import {getSession, logout as authLogout, getUserMeta, savePrevSession, getPrevSession, switchToPrevSession, clearLocalAuthData, startGitHubDeviceFlow, pollGitHubDeviceToken, fetchGitHubProfile, loginWithGitHub, getRegisteredAccounts, switchToAccount, ensureSiteAccount} from '../lib/auth.js';
 import {
     listSaves, saveProject, deleteSave, exportSaveFile, parseSaveFileText,
     collectProjectState, restoreProjectState
@@ -24,8 +27,11 @@ import {buildSyncUrl, parseSyncPayload, importSyncPayload} from '../lib/sync.js'
 import {
     cloudAvailable, cloudSearchUsers, cloudListRelations, cloudFollow, cloudUnfollow
 } from '../lib/cloud.js';
-import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
+import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, loadDirPlugins, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
 import {installVoiceInput} from '../lib/voice-input.js';
+import {openAskBar} from '../lib/ai-ask-bar.js';
+import {LEGAL_DOCS} from '../lib/legal-docs.js';
+import DebuggerPanel from './DebuggerPanel.jsx';
 import '../styles/extension-builder.css';
 
 // 积木预设颜色（Scratch 风格常用色，供积木定义面板选择）
@@ -184,7 +190,6 @@ const ExtensionBuilderInner = () => {
     const [generatedCode, setGeneratedCode] = useState('');
     const [loaded, setLoaded] = useState(false);
     const [loadError, setLoadError] = useState(null);
-    const [activeTab, setActiveTab] = useState('editor');
     const [showBlockBuilder, setShowBlockBuilder] = useState(false);
     const [builderModalPos, setBuilderModalPos] = useState(null); // {x, y}
     const builderModalRef = useRef(null);
@@ -200,14 +205,36 @@ const ExtensionBuilderInner = () => {
     // disappear during drags).
     const customBlockXmlRef = useRef(new Map());
 
-    // Close the floating builder window with the Escape key.
+    // 制作积木浮窗的开关副作用：Esc 关闭 + 主动刷新 Blockly 视口。
+    //
+    // 为什么要刷新视口：浮窗虽是 position:fixed 独立层，但它的挂载/卸载
+    // 会让浏览器重排；而 Blockly 的 SVG 尺寸、toolbox 宽度、flyout 的
+    // clipPath 全是缓存值，收不到 resize 就不重算。表现为打开浮窗后左侧
+    // 积木工具箱 / flyout 被裁切甚至整块看不见。这里在开关后的 0/120/400ms
+    // 各补一次 svgResize（覆盖 React 提交、字体、滚动条出现的时序差）。
     useEffect(() => {
-        if (!showBlockBuilder) return;
+        const refreshBlockly = () => {
+            const ws = workspaceRef.current;
+            const B = window._extBuilderBlockly || window.Blockly;
+            if (ws && B && typeof B.svgResize === 'function') {
+                try { B.svgResize(ws); } catch (e) { /* 忽略 */ }
+            }
+        };
+        const timers = [0, 120, 400].map((ms) => setTimeout(refreshBlockly, ms));
+        const clearTimers = () => timers.forEach((t) => clearTimeout(t));
+
+        if (!showBlockBuilder) {
+            // 关闭时也要刷一次，把工作区从「被浮窗挤压/裁切」的状态恢复。
+            return clearTimers;
+        }
         const onKey = (e) => {
             if (e.key === 'Escape') setShowBlockBuilder(false);
         };
         document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
+        return () => {
+            clearTimers();
+            document.removeEventListener('keydown', onKey);
+        };
     }, [showBlockBuilder]);
 
     // Drag the floating builder window by its header.
@@ -313,39 +340,42 @@ const ExtensionBuilderInner = () => {
     }, [handleBuilderResizeMove, handleBuilderResizeEnd]);
     const [searchTerm, setSearchTerm] = useState('');
     const [extInfo, setExtInfo] = useState(DEFAULT_EXTENSION_INFO);
+    // extInfo.color1 的实时镜像：供 addStarterBlocks 等普通函数路径读取，
+    // 避免每个调用点都要把 extInfo.color1 加进依赖数组（漏加会让颜色过期）。
+    const extColor1Ref = useRef(DEFAULT_EXTENSION_INFO.color1);
+    extColor1Ref.current = extInfo.color1 || DEFAULT_EXTENSION_INFO.color1;
     const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
     const [editingBlockId, setEditingBlockId] = useState(null);
     const [editingName, setEditingName] = useState('');
     const [settingsDraft, setSettingsDraft] = useState(null);
     const [showBlockPreview, setShowBlockPreview] = useState(false);
+    // AI 询问条（对齐 DeepSeek Harness 的 ask_user_question）：贴在 AI 面板的
+    // 提示词输入框上方，一次可以问多个问题。句柄存在 ref 里而不是 state ——
+    // 它是 lib/ai-ask-bar.js 里的原生 DOM 组件，不参与 React 渲染。
+    const aiAskBarRef = useRef(null);
 
     // ---- 登录 / 存档 / 跨站同步 ----
     const [session, setSession] = useState(() => getSession());
-    const [showAuthModal, setShowAuthModal] = useState(false);
-    const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
-    const [authUser, setAuthUser] = useState('');
-    const [authPass, setAuthPass] = useState('');
-    const [authPass2, setAuthPass2] = useState('');
-    const [authEmail, setAuthEmail] = useState(''); // 注册用邮箱
-    const [authError, setAuthError] = useState('');
-    const [authBusy, setAuthBusy] = useState(false);
-    const [authRemember, setAuthRemember] = useState(true); // 自动登录（记住我）默认开启
-    const [authCode, setAuthCode] = useState('');           // 邮箱验证码（注册用）
-    const [codeSending, setCodeSending] = useState(false);   // 发送验证码中
-    const [codeCountdown, setCodeCountdown] = useState(0);   // 重发倒计时（秒）
-    const [devCode, setDevCode] = useState('');               // 开发模式显示的验证码
-    const codeTimerRef = useRef(null);
+    // 登录方式只有一种：GitHub Device Flow。全程在编辑器页面内完成，
+    // 不跳 scratchextensioneditor.cc.cd，也不依赖任何第三方中转站。
+    // 用户名/密码、邮箱验证码、Turnstile 那套本地账号体系已下线。
+    // deviceFlow 描述当前授权进度；null 表示没有登录流程在跑。
+    //   status: 'starting' | 'waiting' | 'error'
+    const [deviceFlow, setDeviceFlow] = useState(null);
+    const deviceFlowTimerRef = useRef(null);
+    const deviceFlowBusyRef = useRef(false);
+    // 条款弹窗：null | 'terms' | 'privacy'。正文在 lib/legal-docs.js，
+    // 与网站上的条款页内容一致；这里只决定显示哪一篇。
+    const [legalModal, setLegalModal] = useState(null);
+    // 是否已同意条款。默认 false（沉默不等于同意）：未同意时点「GitHub 登录」
+    // 会先弹条款窗，同意后才真正发起 Device Flow。
+    const [legalAgreed, setLegalAgreed] = useState(false);
+    // 用户是在「准备登录」时被条款拦下的：同意后应自动继续登录，
+    // 否则他得再点一次「GitHub 登录」。
+    const pendingLoginRef = useRef(false);
     const [prevSession, setPrevSession] = useState(() => getPrevSession()); // 切换账号时记住的上一个会话
     const [showAccountSwitcher, setShowAccountSwitcher] = useState(false); // 多账号切换子菜单
     const [accountList, setAccountList] = useState(() => getRegisteredAccounts()); // 已注册账号列表
-    // ---- Cloudflare Turnstile 人机验证（注册模式） ----
-    const TURNSTILE_SITEKEY = '0x4AAAAAAEeqDjN4nAzMOE8q';
-    const [turnstileLoaded, setTurnstileLoaded] = useState(false);
-    const [turnstileWidgetId, setTurnstileWidgetId] = useState(null);
-    const [turnstileToken, setTurnstileToken] = useState('');
-    const turnstileContainerRef = useRef(null);
-    // GitHub OAuth 弹窗流程：保存本次授权 state，用于回调消息校验（防 CSRF）
-    const githubStateRef = useRef('');
     const [showSavesPanel, setShowSavesPanel] = useState(false);
     const [savesList, setSavesList] = useState([]);
     const [saveNameInput, setSaveNameInput] = useState('');
@@ -373,7 +403,7 @@ const ExtensionBuilderInner = () => {
     // ─── 全局 z-index 层级管理（基准 1000000，高于所有旧的固定 z-index） ───
     const Z_BASE = 1000000;
     const [panelZIndexes, setPanelZIndexes] = useState({
-        builder: Z_BASE, settings: Z_BASE, user: Z_BASE, stats: Z_BASE, install: Z_BASE, rtc: Z_BASE, nova: Z_BASE
+        builder: Z_BASE, settings: Z_BASE, user: Z_BASE, stats: Z_BASE, install: Z_BASE, rtc: Z_BASE, nova: Z_BASE, debugger: Z_BASE
     });
     const zCounterRef = useRef(Z_BASE);
     const bringToFront = useCallback((panelId) => {
@@ -449,6 +479,7 @@ const ExtensionBuilderInner = () => {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showToolsMenu, setShowToolsMenu] = useState(false);
     const [showFileMenu, setShowFileMenu] = useState(false);
+    const [showEditMenu, setShowEditMenu] = useState(false);
     const [showStatsPanel, setShowStatsPanel] = useState(false);
     const statsPanelRef = useRef(null);
     const statsResizeLayerRef = useRef(null);
@@ -459,6 +490,19 @@ const ExtensionBuilderInner = () => {
     const statsDragRef = useRef(null);
     const statsResizeRef = useRef(null);
     const [statsTick, setStatsTick] = useState(0); // 强制 projectStats 重算的计数器
+
+    // ─── 调试器悬浮框状态（与设置面板同一套交互：拖动 / 拉伸 / 最大化 / 最小化 / 关闭）───
+    // 说明：调试器不再占用右侧固定栏，而是像设置面板一样浮在工作区之上，
+    // 因为它的内容是「打开在线编辑器」，用户往往需要一边看工作区一边点。
+    const [showDebuggerPanel, setShowDebuggerPanel] = useState(false);
+    const debuggerPanelRef = useRef(null);
+    const debuggerResizeLayerRef = useRef(null);
+    const [debuggerFloatBounds, setDebuggerFloatBounds] = useState({ x: 260, y: 90, w: 420, h: 520 });
+    const [debuggerMinimized, setDebuggerMinimized] = useState(false);
+    const [debuggerMaximized, setDebuggerMaximized] = useState(false);
+    const debuggerSavedBounds = useRef(null);
+    const debuggerDragRef = useRef(null);
+    const debuggerResizeRef = useRef(null);
 
     // 用户面板悬浮框状态（个人主页/好友/存档共用一套，同时只开一个）
     const [userPanelType, setUserPanelType] = useState(null); // 'profile' | 'friends' | 'saves'
@@ -1459,7 +1503,7 @@ const ExtensionBuilderInner = () => {
             // customBlock so the canvas is populated immediately. Subsequent
             // starter blocks are added by handleCreateBlock.
             customBlocks.forEach((b) => {
-                addStarterBlocks(workspace, Blockly, b.name, b.id, b.blockType);
+                addStarterBlocks(workspace, Blockly, b.name, b.id, b.blockType, b.colour);
             });
             if (customBlocks.length) {
                 const first = findBlockByCustomId(workspace, customBlocks[0].id);
@@ -1681,10 +1725,14 @@ const ExtensionBuilderInner = () => {
         if (!Blockly) return;
         if (extAddonsCleanupRef.current) return; // 已激活
         let cancelled = false;
-        applyExtAddons({
-            Blockly,
-            getWorkspace: () => workspaceRef.current
-        }).then(cleanup => {
+        // 先扫「编辑器数据文件夹」里的插件（终端安装的落点），再统一激活。
+        // 浏览器读不了本地目录，所以这一步是向 Node 侧要清单；接口不存在就静默跳过。
+        loadDirPlugins()
+            .catch(() => [])
+            .then(() => applyExtAddons({
+                Blockly,
+                getWorkspace: () => workspaceRef.current
+            })).then(cleanup => {
             if (!cancelled) extAddonsCleanupRef.current = cleanup;
         }).catch(e => console.warn('[ExtAddons] 激活失败:', e));
         return () => {
@@ -1736,10 +1784,11 @@ const ExtensionBuilderInner = () => {
                             : (blockType || 'command').toUpperCase() === 'CONDITIONAL' ? 'CONDITIONAL'
                                 : 'COMMAND';
                 def._text = '[' + (blockName || 'block') + ']';
-                // 积木自定义颜色（hex，如 #FF6680）；留空使用默认色
-                if (colour) {
-                    try { def.setColour(colour); } catch (e) { /* 忽略非法色 */ }
-                }
+                // 颜色唯一真源：自定义色 > 扩展主题色（getInfo().color1）。
+                // 与预览 SVG、导出代码共用 resolveBlockColour，保证
+                // 工作区 / 预览 / 导出后 TurboWarp 三处颜色一致。
+                const resolvedColour = resolveBlockColour({colour: colour || ''}, extColor1Ref.current);
+                try { def.setColour(resolvedColour); } catch (e) { /* 忽略非法色 */ }
                 // 定义扩展的积木块禁止一切删除（拖动/右键/Delete 键），
                 // 防止用户误删导致工作区与代码面板失去对应关系。
                 def.setDeletable(false);
@@ -1795,7 +1844,7 @@ const ExtensionBuilderInner = () => {
                 const dom = B.Xml.textToDom(savedXml);
                 B.Xml.domToWorkspace(dom, ws);
             } else {
-                addStarterBlocks(ws, B, block?.name || blockName);
+                addStarterBlocks(ws, B, block?.name || blockName, block?.id, block?.blockType, block?.colour);
             }
             console.log('[ExtBuilder] Loaded workspace for block:', blockName);
         } catch (e) {
@@ -1803,7 +1852,7 @@ const ExtensionBuilderInner = () => {
             // Fallback: just add starter
             const ws = workspaceRef.current;
             const B = window._extBuilderBlockly || window.Blockly || {};
-            addStarterBlocks(ws, B, blockName);
+            addStarterBlocks(ws, B, blockName, block?.id, block?.blockType, block?.colour);
         }
     }, [customBlocks]);
 
@@ -1941,9 +1990,13 @@ const ExtensionBuilderInner = () => {
                     if (f) f.setValue(updates.blockType);
                 }
                 if (Object.prototype.hasOwnProperty.call(updates, 'colour')) {
+                    // 清除自定义色时回退到扩展主题色（不是 290 紫），
+                    // 与预览 / 导出代码保持同一规则。
                     try {
-                        if (updates.colour) defBlock.setColour(updates.colour);
-                        else defBlock.setColour(290); // 恢复默认紫色
+                        defBlock.setColour(resolveBlockColour(
+                            {colour: updates.colour || ''},
+                            extColor1Ref.current
+                        ));
                     } catch (e) { /* 忽略非法色 */ }
                 }
             }
@@ -2028,6 +2081,868 @@ const ExtensionBuilderInner = () => {
             return {...b, fields: fields.filter((_, i) => i !== idx)};
         }));
     }, []);
+
+    // ── AI 工具宿主：把扩展编辑器的操作面暴露给内置 AI 插件 ──
+    // nova-patch.js 会把原版 Nova 的「Scratch 项目 DSL」工具集替换成扩展编辑器
+    // 工具集（getExtensionInfo / listCustomBlocks / addBlock / updateBlock /
+    // deleteBlock / setExtensionInfo ...），并把工具派发重定向到
+    // window.__extEditorAiToolHost → 这里实现的 window.__extEditorAI。
+    // 依赖数组覆盖所有被读取的状态，保证 AI 每一轮调用都拿到最新值。
+    useEffect(() => {
+        const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+        const BLOCK_TYPES = ['command', 'reporter', 'boolean', 'hat'];
+        const pickHex = (v) => (typeof v === 'string' && HEX_RE.test(v.trim()) ? v.trim() : '');
+
+        const findBlock = (key) => {
+            const k = String(key == null ? '' : key).trim();
+            if (!k) return null;
+            return customBlocks.find(b => b.id === k) ||
+                customBlocks.find(b => (b.name || '').trim() === k) ||
+                null;
+        };
+
+        const describe = (b, idx) => ({
+            id: b.id,
+            name: b.name || ('我的积木 ' + (idx + 1)),
+            opcode: (b.id || 'block').replace(/[^a-zA-Z0-9]/g, '_'),
+            blockType: b.blockType || 'command',
+            color: resolveBlockColour(b, extColor1Ref.current),
+            isAsync: !!b.isAsync,
+            filterSprite: b.filterSprite !== false,
+            filterStage: b.filterStage !== false,
+            arguments: (Array.isArray(b.parts) ? b.parts : [])
+                .filter(p => p && p.kind === 'input' && p.name)
+                .map(p => ({name: p.name, type: p.inputType === 'Number' ? 'number' : 'string'})),
+            text: (Array.isArray(b.parts) && b.parts.length
+                ? b.parts.map(p => (p.kind === 'text' ? p.value : '[' + p.name + ']')).join('')
+                : (b.name || ''))
+        });
+
+        const api = {
+            getEditorGuide() {
+                return {
+                    success: true,
+                    editor: 'Scratch 扩展编辑器（TurboWarp 扩展可视化制作器）',
+                    output: '独立 TurboWarp 扩展源码：getInfo() + blocks[] + Scratch.extensions.register',
+                    blockTypes: {
+                        command: '堆叠块（按顺序执行）',
+                        reporter: '圆形返回值块',
+                        boolean: '六边形布尔块',
+                        hat: '事件帽块（触发脚本）'
+                    },
+                    rules: [
+                        '积木文案里的命名参数写成 [name]，并且必须有同名 arguments 项，否则 TurboWarp 会静默丢弃该参数，积木渲染成空白。',
+                        '颜色必须是 #RRGGBB 十六进制字符串；积木未设色时继承扩展 color1。',
+                        'isAsync 只用于实现体里含 await 的积木，漏标会导致该积木静默失效。',
+                        '扩展 id 只允许字母和数字（scratch-vm 限制），会作为 getInfo().id 与生成的类名。'
+                    ],
+                    workspace: '画布上真实摆放的积木与注释（与「积木定义」是两回事）：listToolboxBlocks（查工具箱里所有可用积木，20 分类 108 块）/ listWorkspaceBlocks（查画布现状）/ addWorkspaceBlock（放一块）/ deleteWorkspaceBlock（删一块）/ moveWorkspaceBlock（挪位置）/ connectWorkspaceBlocks（把一块接进另一块的插槽，搭逻辑的关键）/ addWorkspaceComment / updateWorkspaceComment / deleteWorkspaceComment（注释增删改）',
+                    blockArguments: '读写画布积木的参数值：inspectWorkspaceBlock（查参数名与当前值）/ setWorkspaceBlockValue（填值）。「说 …」「移动 … 步」刚放下时参数是空的，必须用 setWorkspaceBlockValue 填进去才有意义。',
+                    askUser: '需要用户拍板时（配色、命名、结构选型、二选一）调用 askUser 弹选择框，用户可选项或自己输入。它会一直等到用户作答才返回。',
+                    tools: ['getExtensionInfo', 'listCustomBlocks', 'getCurrentBlock',
+                        'getGeneratedCode', 'addBlock', 'updateBlock', 'deleteBlock',
+                        'setExtensionInfo', 'listToolboxBlocks', 'listWorkspaceBlocks',
+                        'addWorkspaceBlock', 'deleteWorkspaceBlock', 'moveWorkspaceBlock',
+                        'connectWorkspaceBlocks', 'addWorkspaceComment', 'updateWorkspaceComment',
+                        'deleteWorkspaceComment', 'inspectWorkspaceBlock', 'setWorkspaceBlockValue',
+                        'askUser']
+                };
+            },
+
+            getExtensionInfo() {
+                return {success: true, extension: Object.assign({}, extInfo, {blockCount: customBlocks.length})};
+            },
+
+            listCustomBlocks() {
+                return {
+                    success: true,
+                    count: customBlocks.length,
+                    currentBlockId: currentBlockId,
+                    blocks: customBlocks.map(describe)
+                };
+            },
+
+            getCurrentBlock() {
+                const idx = customBlocks.findIndex(b => b.id === currentBlockId);
+                if (idx < 0) return {success: false, error: '当前没有选中的积木'};
+                return {success: true, block: describe(customBlocks[idx], idx)};
+            },
+
+            getGeneratedCode() {
+                const code = exportableCode || generatedCode || '';
+                return {success: true, chars: code.length, code: code};
+            },
+
+            addBlock(args) {
+                const a = args || {};
+                const name = String(a.name == null ? '' : a.name).trim();
+                if (!name) return {success: false, error: 'addBlock 需要 name（积木显示名）'};
+                const blockType = BLOCK_TYPES.indexOf(a.blockType) >= 0 ? a.blockType : 'command';
+                const colour = pickHex(a.color);
+                const id = 'block_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+                const entry = {
+                    id: id, name: name, xml: null, blockType: blockType,
+                    isTerminal: false,
+                    isAsync: !!a.isAsync,
+                    attachAllThreads: false,
+                    filterSprite: a.filterSprite !== false,
+                    filterStage: a.filterStage !== false,
+                    icon: '', colour: colour
+                };
+                setCustomBlocks(prev => [...prev, entry]);
+                currentBlockRef.current = id;
+                setCurrentBlockId(id);
+                if (workspaceRef.current) {
+                    const B = window._extBuilderBlockly || window.Blockly || {};
+                    addStarterBlocks(workspaceRef.current, B, name, id, blockType, colour);
+                    const created = findBlockByCustomId(workspaceRef.current, id);
+                    if (created && workspaceRef.current.select) {
+                        workspaceRef.current.select(created);
+                    }
+                }
+                return {
+                    success: true, id: id, name: name, blockType: blockType,
+                    color: resolveBlockColour(entry, extColor1Ref.current),
+                    message: '已新增积木「' + name + '」并画到工作区'
+                };
+            },
+
+            updateBlock(args) {
+                const a = args || {};
+                const target = findBlock(a.block);
+                if (!target) return {success: false, error: '未找到积木：' + String(a.block == null ? '' : a.block)};
+                const updates = {};
+                if (a.name != null) {
+                    const n = String(a.name).trim();
+                    if (n) updates.name = n;
+                }
+                if (a.blockType != null && BLOCK_TYPES.indexOf(a.blockType) >= 0) updates.blockType = a.blockType;
+                if (a.color != null) updates.colour = pickHex(a.color);
+                if (a.isAsync != null) updates.isAsync = !!a.isAsync;
+                if (a.filterSprite != null) updates.filterSprite = !!a.filterSprite;
+                if (a.filterStage != null) updates.filterStage = !!a.filterStage;
+                if (!Object.keys(updates).length) return {success: false, error: '没有可更新的字段'};
+                handleUpdateBlock(target.id, updates);
+                return {
+                    success: true, id: target.id, updated: Object.keys(updates),
+                    message: '已更新积木「' + (updates.name || target.name) + '」'
+                };
+            },
+
+            deleteBlock(args) {
+                const a = args || {};
+                const target = findBlock(a.block);
+                if (!target) return {success: false, error: '未找到积木：' + String(a.block == null ? '' : a.block)};
+                if (customBlocks.length <= 1) return {success: false, error: '至少要保留一个积木，无法删除'};
+                handleDeleteBlock(target.id);
+                return {success: true, id: target.id, message: '已删除积木「' + (target.name || target.id) + '」'};
+            },
+
+            setExtensionInfo(args) {
+                const a = args || {};
+                const next = Object.assign({}, extInfo);
+                const changed = [];
+                if (a.id != null) {
+                    const id = String(a.id).toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (id) { next.id = id; changed.push('id'); }
+                }
+                if (a.name != null) {
+                    const n = String(a.name).trim();
+                    if (n) { next.name = n; changed.push('name'); }
+                }
+                if (a.color1 != null) {
+                    const c = pickHex(a.color1);
+                    if (c) {
+                        next.color1 = c;
+                        next.color2 = darkenHex(c, 0.85);
+                        next.color3 = darkenHex(c, 0.7);
+                        changed.push('color1', 'color2', 'color3');
+                    }
+                }
+                if (a.color2 != null) { const c = pickHex(a.color2); if (c) { next.color2 = c; changed.push('color2'); } }
+                if (a.color3 != null) { const c = pickHex(a.color3); if (c) { next.color3 = c; changed.push('color3'); } }
+                if (a.description != null) { next.description = String(a.description); changed.push('description'); }
+                if (a.author != null) { next.author = String(a.author); changed.push('author'); }
+                if (a.license != null) { next.license = String(a.license); changed.push('license'); }
+                if (a.docsUrl != null) { next.docsUrl = String(a.docsUrl); changed.push('docsUrl'); }
+                if (!changed.length) return {success: false, error: '没有可更新的字段'};
+                setExtInfo(next);
+                return {success: true, updated: changed, extension: next};
+            },
+
+            // ─────────── 工作区（画布）操作 ───────────
+            // 上面那批工具操作的是「积木定义」（customBlocks 列表）；
+            // 这一批操作的是画布上真实摆放的 Blockly 积木与注释，
+            // 让 AI 能像用户一样把工具箱里的块拖到画布上、删掉、贴便签。
+
+            /** 从 BLOCK_DEFINITIONS 里取一个可读的块名（message0 去掉 %1 占位）。 */
+            _toolboxLabel(type) {
+                const def = BLOCK_DEFINITIONS[type] || {};
+                const raw = String(def.message0 == null ? '' : def.message0);
+                const label = raw.replace(/%\d+/g, '…').replace(/\s+/g, ' ').trim();
+                return label || type;
+            },
+
+            listToolboxBlocks(args) {
+                const a = args || {};
+                const want = a.category ? String(a.category).trim() : '';
+                const categories = [];
+                (TOOLBOX_CONFIG.contents || []).forEach((cat) => {
+                    const blocks = (cat.contents || [])
+                        .filter(c => c && c.kind === 'block' && c.type)
+                        .map(c => {
+                            const def = BLOCK_DEFINITIONS[c.type] || {};
+                            return {
+                                type: c.type,
+                                label: api._toolboxLabel(c.type),
+                                shape: def.id || '',
+                                tooltip: def.tooltip || ''
+                            };
+                        });
+                    if (blocks.length) {
+                        categories.push({category: cat.name, count: blocks.length, blocks: blocks});
+                    }
+                });
+                const filtered = want
+                    ? categories.filter(c => c.category.indexOf(want) >= 0)
+                    : categories;
+                return {
+                    success: true,
+                    categoryCount: filtered.length,
+                    blockCount: filtered.reduce((n, c) => n + c.count, 0),
+                    categories: filtered
+                };
+            },
+
+            listWorkspaceBlocks() {
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const tops = ws.getTopBlocks ? ws.getTopBlocks(true) : [];
+                const blocks = tops.map(b => {
+                    const xy = (b.getRelativeToSurfaceXY && b.getRelativeToSurfaceXY()) || {x: 0, y: 0};
+                    let text = '';
+                    try { text = String(b.toString ? b.toString() : '').replace(/\s+/g, ' ').trim(); } catch (e) { /* 忽略 */ }
+                    return {
+                        id: b.id,
+                        type: b.type,
+                        label: api._toolboxLabel(b.type),
+                        text: text,
+                        x: Math.round(xy.x),
+                        y: Math.round(xy.y),
+                        isBlockDefine: b.type === 'block_define'
+                    };
+                });
+                const comments = (ws.getTopComments ? ws.getTopComments(true) : [])
+                    .map(c => ({
+                        id: c.id,
+                        text: String(c.getText ? c.getText() : ''),
+                        x: Math.round((c.getRelativeToSurfaceXY && c.getRelativeToSurfaceXY().x) || 0),
+                        y: Math.round((c.getRelativeToSurfaceXY && c.getRelativeToSurfaceXY().y) || 0)
+                    }));
+                return {success: true, blockCount: blocks.length, blocks: blocks, commentCount: comments.length, comments: comments};
+            },
+
+            /** 把画布上已有积木整体下移后返回下一个可用的空位 y。 */
+            _nextSlotY(ws, exclude) {
+                const tops = ws.getTopBlocks ? ws.getTopBlocks(true) : [];
+                let bottom = 40;
+                tops.forEach(b => {
+                    if (b === exclude) return;
+                    const y = (b.getRelativeToSurfaceXY && b.getRelativeToSurfaceXY().y) || 0;
+                    const h = b.height || 40;
+                    bottom = Math.max(bottom, y + h + 24);
+                });
+                return bottom;
+            },
+
+            addWorkspaceBlock(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const B = window._extBuilderBlockly || window.Blockly || {};
+                const type = String(a.type == null ? '' : a.type).trim();
+                if (!type) return {success: false, error: 'addWorkspaceBlock 需要 type（积木类型，先用 listToolboxBlocks 查）'};
+                if (!(B.Blocks && B.Blocks[type])) {
+                    return {success: false, error: '未知积木类型：' + type + '（先用 listToolboxBlocks 查可用类型）'};
+                }
+                // block_define 是「积木定义」卡片，由 customBlocks 列表驱动（addBlock /
+                // deleteBlock 管）。在画布上手动加一张会让它和工作区失去对应关系，
+                // 变成一块点了没反应、又删不掉的僵尸卡。这里直接拒绝并给出正确工具。
+                if (type === 'block_define') {
+                    return {success: false, error: 'block_define 是积木定义卡片，请用 addBlock 新增积木，不要直接放到画布上'};
+                }
+
+                let blk = null;
+                try {
+                    const shadows = PLACEHOLDER_SHADOWS[type];
+                    if (shadows && B.Xml && B.Xml.domToWorkspace) {
+                        // 走 XML：让 toolbox 里声明的 shadow 占位（math_number / text 等）
+                        // 一起生成，否则带 input_value 的块会留个空槽，看上去像缺参数。
+                        const valueXml = Object.keys(shadows).map(name => {
+                            const s = shadows[name];
+                            return '<value name="' + name + '"><shadow type="' + s.type +
+                                '"><field name="' + s.field + '">' + s.value + '</field></shadow></value>';
+                        }).join('');
+                        const xmlStr = '<xml xmlns="https://developers.google.com/blockly/xml">' +
+                            '<block type="' + type + '">' + valueXml + '</block></xml>';
+                        const dom = new DOMParser().parseFromString(xmlStr, 'text/xml').documentElement;
+                        const created = B.Xml.domToWorkspace(dom, ws);
+                        // 坑：scratch-blocks 的 domToWorkspace 返回的是 **block id 字符串
+                        // 数组**（源码里 c.push(m.id)），不是 block 对象。早先直接取
+                        // created[0] 当 block 用，导致带 shadow 的块（looks_say 等）
+                        // 返回 id=undefined、坐标也没能移动。这里统一按 id 反查回对象。
+                        const first = created && created[0];
+                        if (first && typeof first === 'object') {
+                            blk = first;
+                        } else if (first && ws.getBlockById) {
+                            blk = ws.getBlockById(first);
+                        }
+                        if (!blk && first) {
+                            // 极端兜底：块确实建出来了但反查失败，至少保住 id
+                            blk = {id: String(first), type: type};
+                        }
+                    } else {
+                        blk = ws.newBlock(type);
+                        if (blk) { blk.initSvg(); blk.render(); }
+                    }
+                } catch (e) {
+                    return {success: false, error: '放置积木失败：' + ((e && e.message) || e)};
+                }
+                if (!blk) return {success: false, error: '放置积木失败：' + type};
+
+                const x = a.x != null && isFinite(Number(a.x)) ? Number(a.x) : 60;
+                const y = a.y != null && isFinite(Number(a.y)) ? Number(a.y) : api._nextSlotY(ws, blk);
+                try {
+                    if (blk.moveBy && blk.getRelativeToSurfaceXY) {
+                        const cur = blk.getRelativeToSurfaceXY() || {x: 0, y: 0};
+                        blk.moveBy(x - cur.x, y - cur.y);
+                    }
+                    if (ws.render) ws.render();
+                } catch (e) { /* 定位失败不影响块已存在 */ }
+                // 默认不抢镜头：AI 连续放十几个块时，每次都居中会让画布疯狂跳动。
+                // 需要让用户看到刚放的那块时，显式传 focus: true。
+                if (a.focus === true && ws.centerOnBlock && blk.id) {
+                    try { ws.centerOnBlock(blk.id); } catch (e) { /* 忽略 */ }
+                }
+                return {
+                    success: true,
+                    id: blk.id,
+                    type: type,
+                    label: api._toolboxLabel(type),
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    message: '已把「' + api._toolboxLabel(type) + '」放到画布上'
+                };
+            },
+
+            deleteWorkspaceBlock(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'deleteWorkspaceBlock 需要 id（先用 listWorkspaceBlocks 查）'};
+                const blk = ws.getBlockById ? ws.getBlockById(id) : null;
+                if (!blk) return {success: false, error: '画布上没找到这个积木：' + id};
+                // block_define 是「积木定义」卡片，和 customBlocks 列表一一对应。
+                // 直接 dispose 掉会留下一条没有卡片、点不着也删不掉的僵尸定义，
+                // 所以这里拒绝并指向正确的工具（deleteBlock 会同时收掉卡片）。
+                if (blk.type === 'block_define') {
+                    return {success: false, error: 'block_define 是积木定义卡片，请用 deleteBlock 删除对应的积木定义'};
+                }
+                const info = {id: blk.id, type: blk.type, label: api._toolboxLabel(blk.type)};
+                try {
+                    blk.dispose(false);
+                } catch (e) {
+                    return {success: false, error: '删除失败：' + ((e && e.message) || e)};
+                }
+                return {
+                    success: true, id: info.id, type: info.type,
+                    message: '已从画布删除「' + info.label + '」'
+                };
+            },
+
+            addWorkspaceComment(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const B = window._extBuilderBlockly || window.Blockly || {};
+                const text = a.text == null ? '' : String(a.text);
+                if (!text.trim()) return {success: false, error: 'addWorkspaceComment 需要 text（注释内容）'};
+                if (!B.WorkspaceCommentSvg) return {success: false, error: '当前 Blockly 不支持工作区注释'};
+                try {
+                    const C = B.WorkspaceCommentSvg;
+                    const size = C.DEFAULT_SIZE || 200;
+                    const comment = new C(ws, text, size, size, false);
+                    const x = a.x != null && isFinite(Number(a.x)) ? Number(a.x) : 40;
+                    const y = a.y != null && isFinite(Number(a.y)) ? Number(a.y) : api._nextSlotY(ws, null);
+                    comment.moveBy(x, y);
+                    if (ws.rendered) {
+                        comment.initSvg();
+                        comment.render(false);
+                    }
+                    if (B.WorkspaceComment && B.WorkspaceComment.fireCreateEvent) {
+                        B.WorkspaceComment.fireCreateEvent(comment);
+                    }
+                    return {
+                        success: true, id: comment.id, text: text,
+                        x: Math.round(x), y: Math.round(y),
+                        message: '已在画布上添加注释'
+                    };
+                } catch (e) {
+                    return {success: false, error: '添加注释失败：' + ((e && e.message) || e)};
+                }
+            },
+
+            /** 按 id 找画布上的注释（注释不是 block，得走 getCommentById）。 */
+            _findComment(id) {
+                const ws = workspaceRef.current;
+                if (!ws || !ws.getCommentById) return null;
+                try { return ws.getCommentById(id) || null; } catch (e) { return null; }
+            },
+
+            updateWorkspaceComment(args) {
+                const a = args || {};
+                if (!workspaceRef.current) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'updateWorkspaceComment 需要 id（先用 listWorkspaceBlocks 查）'};
+                const comment = api._findComment(id);
+                if (!comment) return {success: false, error: '画布上没找到这条注释：' + id};
+                const changed = [];
+                if (a.text != null) {
+                    const text = String(a.text);
+                    if (!text.trim()) return {success: false, error: '注释内容不能为空（改文字时 text 必填）'};
+                    try { comment.setText(text); } catch (e) {
+                        return {success: false, error: '改注释文字失败：' + ((e && e.message) || e)};
+                    }
+                    changed.push('text');
+                }
+                if (a.x != null || a.y != null) {
+                    try {
+                        const cur = (comment.getRelativeToSurfaceXY && comment.getRelativeToSurfaceXY()) || {x: 0, y: 0};
+                        const nx = a.x != null && isFinite(Number(a.x)) ? Number(a.x) : cur.x;
+                        const ny = a.y != null && isFinite(Number(a.y)) ? Number(a.y) : cur.y;
+                        comment.moveBy(nx - cur.x, ny - cur.y);
+                        changed.push('position');
+                    } catch (e) { /* 只挪位置失败不算致命 */ }
+                }
+                if (!changed.length) return {success: false, error: '没有可更新的字段（text / x / y）'};
+                try { if (comment.render) comment.render(false); } catch (e) { /* 忽略 */ }
+                let now = '';
+                try { now = String(comment.getText ? comment.getText() : ''); } catch (e) { /* 忽略 */ }
+                return {success: true, id: id, updated: changed, text: now, message: '已更新注释'};
+            },
+
+            deleteWorkspaceComment(args) {
+                const a = args || {};
+                if (!workspaceRef.current) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'deleteWorkspaceComment 需要 id（先用 listWorkspaceBlocks 查）'};
+                const comment = api._findComment(id);
+                if (!comment) return {success: false, error: '画布上没找到这条注释：' + id};
+                let text = '';
+                try { text = String(comment.getText ? comment.getText() : ''); } catch (e) { /* 忽略 */ }
+                try {
+                    comment.dispose();
+                } catch (e) {
+                    return {success: false, error: '删除注释失败：' + ((e && e.message) || e)};
+                }
+                return {success: true, id: id, message: '已删除注释「' + text.slice(0, 30) + '」'};
+            },
+
+            /**
+             * 把一块积木接到另一块的插槽上 —— 搭真实逻辑的关键一步。
+             * 没有它，AI 只能摆出一排互不相干的空壳（「如果 …」永远没有条件）。
+             */
+            connectWorkspaceBlocks(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const parentId = String(a.parent == null ? '' : a.parent).trim();
+                const childId = String(a.child == null ? '' : a.child).trim();
+                if (!parentId || !childId) return {success: false, error: 'connectWorkspaceBlocks 需要 parent 和 child（都是 listWorkspaceBlocks 里的 id）'};
+                if (parentId === childId) return {success: false, error: '不能把积木接到自己身上'};
+                const parent = ws.getBlockById ? ws.getBlockById(parentId) : null;
+                if (!parent) return {success: false, error: '没找到父积木：' + parentId};
+                const child = ws.getBlockById ? ws.getBlockById(childId) : null;
+                if (!child) return {success: false, error: '没找到子积木：' + childId};
+
+                // 子块要么是 reporter/boolean（outputConnection），要么是语句块（previousConnection）
+                const childConn = child.outputConnection || child.previousConnection;
+                if (!childConn) return {success: false, error: '积木「' + child.type + '」没有可连接的接口'};
+
+                // 先断开 child 原有的连线，避免「已经连着别处」导致 connect 静默失败
+                try {
+                    if (childConn.isConnected && childConn.isConnected()) childConn.disconnect();
+                    if (child.outputConnection && child.outputConnection.isConnected && child.outputConnection.isConnected()) {
+                        child.outputConnection.disconnect();
+                    }
+                } catch (e) { /* 忽略 */ }
+
+                const attempt = (conn) => {
+                    if (!conn) return false;
+                    try {
+                        if (typeof conn.checkType_ === 'function' && !conn.checkType_(childConn)) return false;
+                    } catch (e) { return false; }
+                    try {
+                        conn.connect(childConn);
+                        if (conn.targetBlock && conn.targetBlock() === child) {
+                            try { if (parent.render) parent.render(); } catch (e2) { /* 忽略 */ }
+                            return true;
+                        }
+                    } catch (e) { /* 试下一个 */ }
+                    return false;
+                };
+
+                const inputName = a.input == null ? '' : String(a.input).trim();
+                if (inputName) {
+                    let input = null;
+                    (parent.inputList || []).forEach((inp) => { if (inp.name === inputName) input = inp; });
+                    if (!input) {
+                        const names = [];
+                        (parent.inputList || []).forEach((inp) => { if (inp.name && inp.connection) names.push(inp.name); });
+                        return {success: false, error: '积木「' + parent.type + '」上没有插槽「' + inputName + '」' + (names.length ? '（可用：' + names.join(' / ') + '）' : '')};
+                    }
+                    if (!attempt(input.connection)) {
+                        return {success: false, error: '「' + child.type + '」接不进「' + parent.type + '」的「' + inputName + '」插槽（形状或类型不匹配）'};
+                    }
+                    return {success: true, parent: parentId, child: childId, input: inputName, message: '已把「' + api._toolboxLabel(child.type) + '」接进「' + api._toolboxLabel(parent.type) + '」的 ' + inputName};
+                }
+
+                // 没指定插槽：先试值插槽，再试语句串联
+                const valueInputs = [];
+                (parent.inputList || []).forEach((inp) => { if (inp.name && inp.connection) valueInputs.push(inp); });
+                for (let i = 0; i < valueInputs.length; i++) {
+                    if (attempt(valueInputs[i].connection)) {
+                        return {success: true, parent: parentId, child: childId, input: valueInputs[i].name, message: '已把「' + api._toolboxLabel(child.type) + '」接进「' + api._toolboxLabel(parent.type) + '」的 ' + valueInputs[i].name};
+                    }
+                }
+                if (child.previousConnection && parent.nextConnection && attempt(parent.nextConnection)) {
+                    return {success: true, parent: parentId, child: childId, input: 'next', message: '已把「' + api._toolboxLabel(child.type) + '」串到「' + api._toolboxLabel(parent.type) + '」下面'};
+                }
+                return {success: false, error: '这两块积木接不上（形状不匹配）：' + parent.type + ' ← ' + child.type + '。用 inspectWorkspaceBlock 看插槽名，或用 listToolboxBlocks 换一个形状合适的块'};
+            },
+
+            moveWorkspaceBlock(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'moveWorkspaceBlock 需要 id'};
+                const blk = ws.getBlockById ? ws.getBlockById(id) : null;
+                if (!blk) return {success: false, error: '画布上没找到这个积木：' + id};
+                if (a.x == null && a.y == null) return {success: false, error: 'moveWorkspaceBlock 需要 x 或 y'};
+                try {
+                    const cur = (blk.getRelativeToSurfaceXY && blk.getRelativeToSurfaceXY()) || {x: 0, y: 0};
+                    const nx = a.x != null && isFinite(Number(a.x)) ? Number(a.x) : cur.x;
+                    const ny = a.y != null && isFinite(Number(a.y)) ? Number(a.y) : cur.y;
+                    blk.moveBy(nx - cur.x, ny - cur.y);
+                    if (ws.render) ws.render();
+                    return {success: true, id: id, x: Math.round(nx), y: Math.round(ny), message: '已把「' + api._toolboxLabel(blk.type) + '」移到 ' + Math.round(nx) + ',' + Math.round(ny)};
+                } catch (e) {
+                    return {success: false, error: '移动失败：' + ((e && e.message) || e)};
+                }
+            },
+
+            // ─────────── 读写画布积木的参数值 ───────────
+            // addWorkspaceBlock 只摆出空壳（「说 …」「移动 … 步」）。
+            // 这几个工具让 AI 把参数真正填进去，搭出有意义的逻辑，
+            // 而不是留一堆默认占位。
+
+            /** 取 block 上第一个可用字段名（math_number→NUM，text→TEXT，logic_boolean→BOOL）。 */
+            _firstFieldName(blk) {
+                if (!blk || !blk.inputList) return '';
+                for (let i = 0; i < blk.inputList.length; i++) {
+                    const row = (blk.inputList[i] && blk.inputList[i].fieldRow) || [];
+                    for (let j = 0; j < row.length; j++) {
+                        if (row[j] && row[j].name) return row[j].name;
+                    }
+                }
+                return '';
+            },
+
+            /** 读一个占位块（shadow）里存的值。 */
+            _readBlockValue(blk) {
+                if (!blk) return '';
+                const fn = api._firstFieldName(blk);
+                if (!fn || !blk.getFieldValue) return '';
+                try {
+                    const v = blk.getFieldValue(fn);
+                    return v == null ? '' : String(v);
+                } catch (e) {
+                    return '';
+                }
+            },
+
+            /** 按插槽的 check 约束挑一个合适的占位块类型。 */
+            _pickShadowType(input, hint) {
+                const h = String(hint == null ? '' : hint).toLowerCase();
+                if (h === 'number' || h === 'num') return 'math_number';
+                if (h === 'boolean' || h === 'bool') return 'logic_boolean';
+                if (h === 'text' || h === 'string') return 'text';
+                let chk = null;
+                try {
+                    if (input && input.connection) {
+                        chk = input.connection.check_ ||
+                            (input.connection.getCheck && input.connection.getCheck());
+                    }
+                } catch (e) { /* 忽略 */ }
+                const arr = Array.isArray(chk) ? chk : (chk ? [chk] : []);
+                if (arr.indexOf('Boolean') >= 0) return 'logic_boolean';
+                if (arr.indexOf('Number') >= 0) return 'math_number';
+                return 'text';
+            },
+
+            /** 把值写进占位块，按块类型做类型转换。 */
+            _writeBlockValue(blk, value) {
+                const fn = api._firstFieldName(blk);
+                if (!fn || !blk.setFieldValue) return false;
+                let v = value;
+                if (blk.type === 'math_number') {
+                    const n = Number(value);
+                    v = isFinite(n) ? n : 0;
+                } else if (blk.type === 'logic_boolean') {
+                    const t = value === true || value === 'true' || value === 'TRUE' || value === '是';
+                    v = t ? 'TRUE' : 'FALSE';
+                } else {
+                    v = String(value == null ? '' : value);
+                }
+                try {
+                    blk.setFieldValue(v, fn);
+                } catch (e) {
+                    try { blk.setFieldValue(String(v), fn); } catch (e2) { return false; }
+                }
+                return true;
+            },
+
+            inspectWorkspaceBlock(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'inspectWorkspaceBlock 需要 id（先用 listWorkspaceBlocks 查）'};
+                const blk = ws.getBlockById ? ws.getBlockById(id) : null;
+                if (!blk) return {success: false, error: '画布上没找到这个积木：' + id};
+
+                const argList = [];
+                (blk.inputList || []).forEach((inp) => {
+                    // 内联字段：下拉 / 文本 / 数字
+                    (inp.fieldRow || []).forEach((f) => {
+                        if (!f || !f.name) return;
+                        let cur = '';
+                        try { cur = f.getValue(); } catch (e) { /* 忽略 */ }
+                        argList.push({
+                            name: f.name,
+                            kind: 'field',
+                            current: cur == null ? '' : String(cur),
+                            writable: true
+                        });
+                    });
+                    // 插槽（input_value）：里面可能是占位块，也可能是真实积木
+                    if (inp.name && inp.connection && inp.connection.targetBlock) {
+                        const target = inp.connection.targetBlock();
+                        const isShadow = !!(target && target.isShadow && target.isShadow());
+                        argList.push({
+                            name: inp.name,
+                            kind: 'input',
+                            current: target ? (isShadow ? api._readBlockValue(target) : '(已被积木占用)') : '',
+                            shadowType: isShadow ? target.type : '',
+                            writable: !target || isShadow
+                        });
+                    }
+                });
+
+                return {
+                    success: true,
+                    id: blk.id,
+                    type: blk.type,
+                    label: api._toolboxLabel(blk.type),
+                    argumentCount: argList.length,
+                    arguments: argList,
+                    hint: '用 setWorkspaceBlockValue({id, name, value}) 写入；name 就是上面 arguments 里的名字。'
+                };
+            },
+
+            setWorkspaceBlockValue(args) {
+                const a = args || {};
+                const ws = workspaceRef.current;
+                if (!ws) return {success: false, error: '工作区尚未就绪'};
+                const id = String(a.id == null ? '' : a.id).trim();
+                if (!id) return {success: false, error: 'setWorkspaceBlockValue 需要 id（先用 listWorkspaceBlocks 查）'};
+                const name = String(a.name == null ? '' : a.name).trim();
+                if (!name) return {success: false, error: 'setWorkspaceBlockValue 需要 name（参数名，先用 inspectWorkspaceBlock 查）'};
+                if (a.value == null) return {success: false, error: 'setWorkspaceBlockValue 需要 value'};
+                const blk = ws.getBlockById ? ws.getBlockById(id) : null;
+                if (!blk) return {success: false, error: '画布上没找到这个积木：' + id};
+
+                // 1) 先当内联字段处理（下拉 / 文本 / 数字）
+                let field = null;
+                (blk.inputList || []).forEach((inp) => {
+                    (inp.fieldRow || []).forEach((f) => { if (f && f.name === name) field = f; });
+                });
+                if (field) {
+                    let before = '';
+                    try { before = field.getValue(); } catch (e) { /* 忽略 */ }
+                    try {
+                        field.setValue(String(a.value));
+                    } catch (e) {
+                        return {success: false, error: '写入字段失败：' + ((e && e.message) || e)};
+                    }
+                    if (blk.render) { try { blk.render(); } catch (e) { /* 忽略 */ } }
+                    // after 必须是「从块里回读到的值」，不是回显输入值。
+                    // 下拉字段会拒绝非法选项、数字字段会规范化精度，
+                    // 回显输入会让 AI 以为写成功而实际是旧值。
+                    let after = '';
+                    try { after = field.getValue(); } catch (e) { /* 忽略 */ }
+                    const afterStr = after == null ? '' : String(after);
+                    // 比较忽略大小写：scratch-blocks 的下拉字段（logic_boolean）
+                    // 声明值是 'TRUE'/'FALSE'，回读却是 'true'/'false'，
+                    // 严格相等会把一次成功的写入误报成 applied:false。
+                    const appliedSame = String(afterStr).toLowerCase() === String(a.value).toLowerCase();
+                    return {
+                        success: true, kind: 'field', id: id, name: name,
+                        before: before == null ? '' : String(before),
+                        after: afterStr,
+                        requested: String(a.value),
+                        applied: appliedSame,
+                        message: '已把「' + name + '」设为 ' + afterStr
+                    };
+                }
+
+                // 2) 再当插槽（input_value）处理
+                let input = null;
+                (blk.inputList || []).forEach((inp) => {
+                    if (inp.name === name && inp.connection) input = inp;
+                });
+                if (!input) {
+                    return {success: false, error: '这个积木上没有名为「' + name + '」的参数（先用 inspectWorkspaceBlock 查参数名）'};
+                }
+
+                const conn = input.connection;
+                const target = conn.targetBlock ? conn.targetBlock() : null;
+                const isShadow = !!(target && target.isShadow && target.isShadow());
+
+                // 已经接了一块真实积木：不覆盖用户/AI 的连法，明确拒绝。
+                if (target && !isShadow) {
+                    return {
+                        success: false,
+                        error: '插槽「' + name + '」里已经接了一块积木（' + target.type + '），请先把它移走再设值'
+                    };
+                }
+
+                if (target) {
+                    // 已有占位块：直接改它的值
+                    if (!api._writeBlockValue(target, a.value)) {
+                        return {success: false, error: '写入插槽失败：占位块 ' + target.type + ' 没有可用字段'};
+                    }
+                    if (blk.render) { try { blk.render(); } catch (e) { /* 忽略 */ } }
+                    // 回读实际落地值（数字占位块会做 parseFloat 规范化）
+                    const afterStr = api._readBlockValue(target);
+                    return {
+                        success: true, kind: 'input', id: id, name: name,
+                        shadowType: target.type, after: afterStr,
+                        requested: String(a.value),
+                        applied: String(afterStr).toLowerCase() === String(a.value).toLowerCase(),
+                        message: '已把「' + name + '」设为 ' + afterStr
+                    };
+                }
+
+                // 插槽是空的：新建一个占位块连上去
+                const B = window._extBuilderBlockly || window.Blockly || {};
+                const shadowType = api._pickShadowType(input, a.shadowType || a.valueType);
+                if (!(B.Blocks && B.Blocks[shadowType])) {
+                    return {success: false, error: '无法创建占位块 ' + shadowType};
+                }
+                let sh = null;
+                try {
+                    sh = ws.newBlock(shadowType);
+                    if (sh.setShadow) sh.setShadow(true);
+                    if (sh.initSvg) sh.initSvg();
+                    if (sh.render) sh.render();
+                    conn.connect(sh.outputConnection);
+                } catch (e) {
+                    return {success: false, error: '创建占位块失败：' + ((e && e.message) || e)};
+                }
+                if (!api._writeBlockValue(sh, a.value)) {
+                    return {success: false, error: '占位块已创建但写值失败：' + shadowType};
+                }
+                if (blk.render) { try { blk.render(); } catch (e) { /* 忽略 */ } }
+                const afterStr = api._readBlockValue(sh);
+                return {
+                    success: true, kind: 'input', id: id, name: name,
+                    shadowType: shadowType, after: afterStr,
+                    requested: String(a.value),
+                    applied: String(afterStr).toLowerCase() === String(a.value).toLowerCase(),
+                    message: '已把「' + name + '」设为 ' + afterStr
+                };
+            },
+
+            // ─────────── 询问条：让用户拍板 ───────────
+            // 对齐 DeepSeek Harness 的 ask_user_question：
+            //   · 询问条贴在 AI 面板「提示词输入框」上方，不再是挡屏的居中模态
+            //   · 支持一次问多个问题（questions 数组，逐个作答，可回上一个）
+            //   · 左下角显示「本次询问共 N 个问题 · 第 i / N 个」
+            // 返回 Promise：插件侧的工具派发是 await 的，所以 AI 会一直等到
+            // 用户作答再继续，不会自己瞎猜一个值。
+            askUser(args) {
+                const a = args || {};
+
+                // 兼容两种入参：新的 questions 数组，以及旧的单问题 question/options。
+                let raw = Array.isArray(a.questions) ? a.questions.slice() : [];
+                if (!raw.length) {
+                    const one = String(a.question == null ? '' : a.question).trim();
+                    if (one) {
+                        raw = [{
+                            id: a.id,
+                            header: a.header,
+                            question: one,
+                            options: a.options,
+                            allowCustom: a.allowCustom,
+                            multiSelect: a.multiSelect
+                        }];
+                    }
+                }
+                if (!raw.length) {
+                    return {success: false, error: 'askUser 需要 questions（要问用户什么）'};
+                }
+                if (aiAskBarRef.current) {
+                    return {success: false, error: '已经有一个询问条在等待用户作答，请等它关闭后再问'};
+                }
+
+                return new Promise((resolve) => {
+                    let settled = false;
+                    const done = (payload) => {
+                        if (settled) return;
+                        settled = true;
+                        aiAskBarRef.current = null;
+                        resolve(payload);
+                    };
+                    const bar = openAskBar(raw, {
+                        onSubmit(answers) {
+                            done({success: true, answers: answers, answer: answers.length === 1 ? answers[0].answer : answers.map(x => x.answer), raw: answers});
+                        },
+                        onCancel() {
+                            done({success: false, cancelled: true, reason: '用户取消了选择'});
+                        }
+                    });
+                    if (!bar) {
+                        done({success: false, error: 'askUser 的问题列表为空'});
+                        return;
+                    }
+                    aiAskBarRef.current = bar;
+                    // 清理兜底：组件卸载 / 热更新时把 DOM 一起收掉
+                    bar.el.__extAskCleanup = () => done({success: false, cancelled: true, reason: '询问条被销毁'});
+                });
+            }
+        };
+
+        window.__extEditorAI = api;
+        return () => {
+            if (window.__extEditorAI === api) {
+                try { delete window.__extEditorAI; } catch (e) { window.__extEditorAI = null; }
+            }
+        };
+    }, [customBlocks, currentBlockId, extInfo, exportableCode, generatedCode,
+        handleUpdateBlock, handleDeleteBlock]);
 
     // Save block metadata (already applied via setters, this just confirms + shows summary)
     const handleSaveBlockMeta = useCallback((blockId) => {
@@ -2334,6 +3249,143 @@ const ExtensionBuilderInner = () => {
         }
     }, [statsMaximized]);
 
+    // ─── 调试器悬浮框：拖动 / 拉伸 / 最大化 / 最小化 / 关闭 ───
+    const syncDebuggerResizeLayerPos = useCallback(() => {
+        const panel = debuggerPanelRef.current;
+        const layer = debuggerResizeLayerRef.current;
+        if (!panel || !layer) return;
+        const r = panel.getBoundingClientRect();
+        layer.style.left = r.left + 'px';
+        layer.style.top = r.top + 'px';
+        layer.style.width = r.width + 'px';
+        layer.style.height = r.height + 'px';
+    }, []);
+
+    const handleDebuggerHeaderMouseDown = useCallback((e) => {
+        if (debuggerMaximized) return;
+        // 按钮 / 表单控件不触发拖拽，否则点按钮会顺手把面板拖走
+        if (e.target.closest('.ext-float-btn')) return;
+        if (e.target.closest('button, input, select, textarea, a, label')) return;
+        const panel = debuggerPanelRef.current;
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        debuggerDragRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            origLeft: rect.left,
+            origTop: rect.top,
+            lockedWidth: panel.style.width || (panel.offsetWidth + 'px')
+        };
+        e.preventDefault();
+    }, [debuggerMaximized]);
+
+    const handleDebuggerMouseMove = useCallback((e) => {
+        const panel = debuggerPanelRef.current;
+        if (!panel) return;
+        if (debuggerDragRef.current) {
+            const d = debuggerDragRef.current;
+            const dx = e.clientX - d.startX;
+            const dy = e.clientY - d.startY;
+            let newLeft = d.origLeft + dx;
+            let newTop = d.origTop + dy;
+            newTop = Math.max(0, Math.min(newTop, window.innerHeight - 60));
+            newLeft = Math.max(-panel.offsetWidth + 80, Math.min(newLeft, window.innerWidth - 80));
+            panel.style.left = newLeft + 'px';
+            panel.style.top = newTop + 'px';
+            panel.style.right = 'auto';
+            panel.style.width = d.lockedWidth || panel.style.width || (panel.offsetWidth + 'px');
+            panel.style.transform = 'none';
+            syncDebuggerResizeLayerPos();
+        } else if (debuggerResizeRef.current) {
+            const d = debuggerResizeRef.current;
+            const dx = e.clientX - d.startX;
+            const dy = e.clientY - d.startY;
+            let newLeft = d.origLeft, newTop = d.origTop, newW = d.origW, newH = d.origH;
+            const minW = 340, minH = 260;
+            if (d.dir.indexOf('e') !== -1) newW = Math.max(minW, d.origW + dx);
+            if (d.dir.indexOf('s') !== -1) newH = Math.max(minH, d.origH + dy);
+            if (d.dir.indexOf('w') !== -1) { newW = Math.max(minW, d.origW - dx); newLeft = d.origLeft + (d.origW - newW); }
+            if (d.dir.indexOf('n') !== -1) { newH = Math.max(minH, d.origH - dy); newTop = d.origTop + (d.origH - newH); }
+            newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - 40));
+            newTop = Math.max(0, Math.min(newTop, window.innerHeight - 40));
+            panel.style.left = newLeft + 'px';
+            panel.style.top = newTop + 'px';
+            panel.style.right = 'auto';
+            panel.style.width = newW + 'px';
+            panel.style.height = newH + 'px';
+            panel.style.transform = 'none';
+            syncDebuggerResizeLayerPos();
+        }
+    }, [syncDebuggerResizeLayerPos]);
+
+    const handleDebuggerMouseUp = useCallback(() => {
+        debuggerDragRef.current = null;
+        debuggerResizeRef.current = null;
+    }, []);
+
+    const handleDebuggerResizeDown = useCallback((dir) => (e) => {
+        if (debuggerMaximized) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const panel = debuggerPanelRef.current;
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        debuggerResizeRef.current = { dir, startX: e.clientX, startY: e.clientY, origLeft: rect.left, origTop: rect.top, origW: rect.width, origH: rect.height };
+    }, [debuggerMaximized]);
+
+    useEffect(() => {
+        if (!showDebuggerPanel) return;
+        const move = (e) => handleDebuggerMouseMove(e);
+        const up = () => handleDebuggerMouseUp();
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        const raf = requestAnimationFrame(syncDebuggerResizeLayerPos);
+        return () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            cancelAnimationFrame(raf);
+        };
+    }, [showDebuggerPanel, handleDebuggerMouseMove, handleDebuggerMouseUp, syncDebuggerResizeLayerPos]);
+
+    const handleDebuggerToggleMin = useCallback(() => setDebuggerMinimized(v => !v), []);
+
+    const handleDebuggerToggleMax = useCallback(() => {
+        const panel = debuggerPanelRef.current;
+        if (!panel) return;
+        if (!debuggerMaximized) {
+            const rect = panel.getBoundingClientRect();
+            debuggerSavedBounds.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+            panel.style.top = ''; panel.style.left = ''; panel.style.right = '';
+            panel.style.bottom = ''; panel.style.width = ''; panel.style.height = '';
+            panel.style.transform = '';
+            setDebuggerMaximized(true);
+        } else {
+            if (debuggerSavedBounds.current) {
+                panel.style.top = debuggerSavedBounds.current.top + 'px';
+                panel.style.left = debuggerSavedBounds.current.left + 'px';
+                panel.style.right = 'auto'; panel.style.bottom = 'auto';
+                panel.style.width = debuggerSavedBounds.current.width + 'px';
+                panel.style.height = debuggerSavedBounds.current.height + 'px';
+                panel.style.transform = 'none';
+            }
+            setDebuggerMaximized(false);
+        }
+        syncDebuggerResizeLayerPos();
+    }, [debuggerMaximized, syncDebuggerResizeLayerPos]);
+
+    /** 打开调试器悬浮框（已最小化则一并还原）。右侧代码面板常驻，不受影响。 */
+    const handleOpenDebugger = useCallback(() => {
+        setShowDebuggerPanel(true);
+        setDebuggerMinimized(false);
+    }, []);
+
+    /** 关闭调试器悬浮框；右侧代码面板不受影响。 */
+    const handleCloseDebugger = useCallback(() => {
+        setShowDebuggerPanel(false);
+        setDebuggerMinimized(false);
+        setDebuggerMaximized(false);
+    }, []);
+
     // ─── 用户面板悬浮框：拖动 / 拉伸 / 最大化 / 最小化 ───
     const userDragRef = useRef(null);
     const userResizeRef = useRef(null);
@@ -2491,7 +3543,7 @@ const ExtensionBuilderInner = () => {
         const items = [];
         let yOffset = 8;
         customBlocks.forEach(function (cb, idx) {
-            const svgXml = renderCustomBlockToSvg(ws, cb, idx);
+            const svgXml = renderCustomBlockToSvg(ws, cb, idx, extInfo.color1);
             if (!svgXml) return;
             // Estimate height from svg width attr for stacking
             const m = svgXml.match(/height="(\d+)"/);
@@ -2504,35 +3556,83 @@ const ExtensionBuilderInner = () => {
             yOffset += Math.max(20, h) + 4;
         });
         setPreviewBlocks(items);
-    }, [showBlockPreview, customBlocks]);
+    }, [showBlockPreview, customBlocks, extInfo.color1]);
 
     // Live preview of the currently-edited customBlock inside the builder
     // panel's "积木预览" zone. Re-renders whenever the active block or its
     // fields / blockType change — renders a REAL Scratch block SVG.
     useEffect(() => {
+        // 面板关闭时清空，避免残留旧 SVG。
+        if (!showBlockBuilder) {
+            setPanelPreviewSvg('');
+            if (panelWorkspaceRef.current) {
+                try { panelWorkspaceRef.current.dispose(); } catch (e) { /* 忽略 */ }
+                panelWorkspaceRef.current = null;
+            }
+            return;
+        }
         const cb = customBlocks.find(b => b.id === currentBlockId);
         if (!cb || !panelPreviewRef.current) {
             setPanelPreviewSvg('');
             return;
         }
         const host = panelPreviewRef.current;
-        if (!panelWorkspaceRef.current) {
+
+        // 关键：每次面板打开都重建 workspace。
+        // 历史坑：宿主容器早期是 1×1（后已改为 1600×1200），一旦 Blockly 在
+        // 错误尺寸下注入过，它的 svg 视口会被永久锁死成 0×0，之后即使调用
+        // Blockly.svgResize 也救不回来（实测 viewBox 恒为 "0 0 0 0"）。
+        // 与其修补脏实例，不如直接 dispose 重建，成本极低且行为确定。
+        if (panelWorkspaceRef.current) {
+            try { panelWorkspaceRef.current.dispose(); } catch (e) { /* 忽略 */ }
+            panelWorkspaceRef.current = null;
+        }
+        // 清掉上一次注入可能残留的 svg 节点
+        try {
+            host.querySelectorAll('svg').forEach(s => s.remove());
+        } catch (e) { /* 忽略 */ }
+
+        try {
             panelWorkspaceRef.current = Blockly.inject(host, {
                 renderer: 'scratch',
                 toolbox: '<xml></xml>',
                 sounds: false,
                 trashcan: false,
                 scrollbars: false,
-                zoom: {controls: false, wheel: false, startScale:1},
+                zoom: {controls: false, wheel: false, startScale: 1},
                 grid: {spacing: 8, length: 1, colour: '#fff', snap: false},
                 collapse: false
             });
+        } catch (e) {
+            console.warn('[ExtBuilder] 面板预览 workspace 注入失败:', e);
+            setPanelPreviewSvg('');
+            return;
         }
+
         const ws = panelWorkspaceRef.current;
-        ws.getTopBlocks().forEach(b => b.dispose(false));
+        // 离屏宿主不会自动触发 Blockly 重算视口，必须显式 resize。
+        try { Blockly.svgResize(ws); } catch (e) { /* 忽略 */ }
         const idx = customBlocks.findIndex(b => b.id === currentBlockId);
-        setPanelPreviewSvg(renderCustomBlockToSvg(ws, cb, Math.max(0, idx)));
-    }, [currentBlockId, customBlocks, activeTab]);
+        let svg = '';
+        try {
+            svg = renderCustomBlockToSvg(ws, cb, Math.max(0, idx), extInfo.color1);
+        } finally {
+            // 关键：拿到 SVG 字符串后立刻销毁预览 workspace 并清空宿主。
+            // scratch-blocks 的 Blockly.inject 会往文档里插入固定 id 的全局
+            // clipPath（blocklyBlockMenuClipPath / blocklyBlockMenuClipRect），
+            // 它假设整页只有一个 workspace。主工作区与预览 workspace 共存时
+            // 会产生重复 id，主工作区 flyout 的 clip-path 引用会被解析到预览
+            // 那个（尺寸 248×1196 ≠ 280×812），导致左侧积木栏被裁切甚至消失。
+            // 预览只需要这段 SVG 字符串，workspace 本身无须保留。
+            try { ws.dispose(); } catch (e) { /* 忽略 */ }
+            panelWorkspaceRef.current = null;
+            try { while (host.firstChild) host.removeChild(host.firstChild); } catch (e) { /* 忽略 */ }
+        }
+        setPanelPreviewSvg(svg);
+        // showBlockBuilder 必须进依赖：面板关闭时 panelPreviewRef.current 是
+        // null，effect 提前 return 并「记住」了这次执行；面板打开后若依赖没变，
+        // effect 不会重跑，预览就永远停在初始空态。
+    }, [currentBlockId, customBlocks, extInfo.color1, showBlockBuilder]);
 
     const handleApplySettings = useCallback(() => {
         if (!settingsDraft) return;
@@ -2637,7 +3737,14 @@ const ExtensionBuilderInner = () => {
             if (workspaceRef.current) {
                 workspaceRef.current.clear();
                 const currentBlock = customBlocks.find(b => b.id === currentBlockRef.current);
-                addStarterBlocks(workspaceRef.current, window._extBuilderBlockly || window.Blockly, currentBlock?.name || '我的积木');
+                addStarterBlocks(
+                    workspaceRef.current,
+                    window._extBuilderBlockly || window.Blockly,
+                    currentBlock?.name || '我的积木',
+                    currentBlock?.id,
+                    currentBlock?.blockType || 'command',
+                    currentBlock?.colour || ''
+                );
             }
         } catch (e) {
             console.error('Reset failed:', e);
@@ -2994,18 +4101,6 @@ const ExtensionBuilderInner = () => {
         }
     }, []);
 
-    // 文件菜单快捷键：Ctrl+O 打开 / Ctrl+S 保存到电脑（对齐 Bilup）
-    useEffect(() => {
-        const onKey = (e) => {
-            if (!(e.ctrlKey || e.metaKey)) return;
-            const k = (e.key || '').toLowerCase();
-            if (k === 'o') { e.preventDefault(); handleLoadExtension(); }
-            else if (k === 's') { e.preventDefault(); handleExport(); }
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [handleLoadExtension, handleExport]);
-
     const handleUndo = useCallback(() => {
         console.log('Undo clicked, workspace:', !!workspaceRef.current);
         try {
@@ -3027,6 +4122,27 @@ const ExtensionBuilderInner = () => {
             console.error('Redo failed:', e);
         }
     }, []);
+
+    // 快捷键：Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Z 撤销 / Ctrl+Y 重做（对齐 Bilup；放 handlers 定义之后避免 TDZ）
+    useEffect(() => {
+        const onKey = (e) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            const k = (e.key || '').toLowerCase();
+            if (k === 'o') { e.preventDefault(); handleLoadExtension(); return; }
+            if (k === 's') { e.preventDefault(); handleExport(); return; }
+            if (k === 'z' || k === 'y') {
+                // 输入框交给浏览器原生撤销、Blockly 工作区交给 Blockly 自己的快捷键
+                const t = e.target;
+                const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+                const inBlockly = t && t.closest && t.closest('.blocklySvg, .blocklyTreeRoot, .blocklyFlyout');
+                if (editable || inBlockly) return;
+                e.preventDefault();
+                if (k === 'z') handleUndo(); else handleRedo();
+            }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [handleLoadExtension, handleExport, handleUndo, handleRedo]);
 
     // ---- 登录 / 存档 / 跨站同步 handlers ----
 
@@ -3136,122 +4252,153 @@ const ExtensionBuilderInner = () => {
             .then(() => setFriendsBusy(false));
     }, [session, loadFriendsRelations]);
 
-    // 发送邮箱验证码（注册模式）
-    const handleSendCode = useCallback(() => {
-        const email = String(authEmail || '').trim();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            setAuthError('请输入正确的邮箱地址后再发送验证码');
-            return;
+    // 停止 Device Flow 轮询（关闭弹窗 / 换账号 / 卸载时调用）
+    const stopDeviceFlow = useCallback(() => {
+        if (deviceFlowTimerRef.current) {
+            clearTimeout(deviceFlowTimerRef.current);
+            deviceFlowTimerRef.current = null;
         }
-        // 先通过人机验证才能发送验证码
-        if (!turnstileToken) {
-            setAuthError('请先完成人机验证（勾选「我是人类」）再获取验证码');
-            return;
-        }
-        if (codeSending || codeCountdown > 0) return;
-        setAuthError('');
-        setCodeSending(true);
-        sendEmailCode(email, 'register', turnstileToken)
-            .then((data) => {
-                // 发送失败（如 EmailJS 配置错误或网络问题）时抛错，不启动倒计时
-                if (data && data.success === false) {
-                    throw new Error(data.error || '验证码发送失败，请稍后重试');
-                }
-                setCodeCountdown(60); // 60 秒内不可重发
-                // 开发模式/EmailJS 失败回退：返回 devCode 字段，直接显示在页面上
-                if (data && data.result && data.result.devCode) {
-                    setDevCode(data.result.devCode);
-                }
-            })
-            .catch((err) => {
-                setAuthError(err && err.message ? err.message : '验证码发送失败，请稍后重试');
-            })
-            .then(() => {
-                setCodeSending(false);
+        deviceFlowBusyRef.current = false;
+        setDeviceFlow(null);
+    }, []);
+
+    // 用 GitHub 登录：GitHub Device Flow。
+    // 流程：向 GitHub 申请「用户码」→ 显示给用户并打开 github.com/login/device
+    // → 用户在自己的 GitHub 里确认 → 本页按 interval 轮询换 access_token
+    // → 拿 token 直连 api.github.com 取资料 → 建立本地会话。
+    //
+    // 相比原先的 authorize 重定向流程，这里没有 redirect_uri，因此：
+    //   1. 不需要 scratchextensioneditor.cc.cd 上的换 token 服务端；
+    //   2. 本地 127.0.0.1 也能登录（重定向流程在本地会被弹到线上编辑器）；
+    //   3. 不经过任何第三方中转站点。
+    // 代价：多一步「复制用户码」，且需在 GitHub OAuth App 里勾选 Enable Device Flow。
+    const startDeviceFlow = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        if (deviceFlowBusyRef.current) return; // 防重复点击
+        deviceFlowBusyRef.current = true;
+        setDeviceFlow({status: 'starting', userCode: '', verificationUri: '', error: ''});
+
+        startGitHubDeviceFlow().then((d) => {
+            if (!deviceFlowBusyRef.current) return; // 已被取消
+            setDeviceFlow({
+                status: 'waiting',
+                userCode: d.userCode,
+                verificationUri: d.verificationUriComplete || d.verificationUri,
+                error: ''
             });
-    }, [authEmail, turnstileToken, codeSending, codeCountdown]);
+            // 打开 GitHub 的设备授权页；URL 里预填了 user_code，用户只需点确认。
+            // 弹窗被拦截也不影响：用户码已显示在面板上，可手动打开并输入。
+            try {
+                window.open(d.verificationUriComplete || d.verificationUri, 'github-device', 'width=600,height=720');
+            } catch (e) { /* 见上 */ }
 
-    // 重发倒计时
-    useEffect(() => {
-        if (codeCountdown <= 0) return undefined;
-        codeTimerRef.current = setTimeout(() => setCodeCountdown(codeCountdown - 1), 1000);
-        return () => clearTimeout(codeTimerRef.current);
-    }, [codeCountdown]);
+            const deadline = Date.now() + d.expiresIn * 1000;
+            let interval = d.interval;
 
-    const handleAuthSubmit = useCallback((e) => {
-        e.preventDefault();
-        setAuthError('');
-        setAuthBusy(true);
-        // 注册模式：先校验人机验证 + 邮箱 + 邮箱验证码
-        if (authMode === 'register') {
-            if (!turnstileToken) {
-                setAuthError('请先完成人机验证');
-                setAuthBusy(false);
-                return;
-            }
-            const email = String(authEmail || '').trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                setAuthError('请输入正确的邮箱地址');
-                setAuthBusy(false);
-                return;
-            }
-            if (!/^\d{6}$/.test(String(authCode || '').trim())) {
-                setAuthError('请输入 6 位邮箱验证码');
-                setAuthBusy(false);
-                return;
-            }
-        }
-        const doAuth = authMode === 'register'
-            ? (authPass === authPass2
-                ? verifyEmailCode(String(authEmail).trim(), String(authCode).trim(), 'register')
-                    .then((verifiedToken) => register(authUser, authPass, authRemember, turnstileToken, String(authEmail).trim(), verifiedToken))
-                : Promise.reject(new Error('两次输入的密码不一致')))
-            : login(authUser, authPass, authRemember);
-        doAuth.then((s) => {
-            setSession(s);
-            setShowAuthModal(false);
-            setAuthUser('');
-            setAuthPass('');
-            setAuthPass2('');
-            setAuthEmail('');
-            setAuthCode('');
-            setTurnstileToken('');
-            // 注册成功后重置 Turnstile
-            if (authMode === 'register' && window.turnstile && turnstileWidgetId !== null) {
-                try { window.turnstile.reset(turnstileWidgetId); } catch (e) { /* ignore */ }
-            }
+            const tick = () => {
+                if (!deviceFlowBusyRef.current) return;
+                if (Date.now() > deadline) {
+                    deviceFlowBusyRef.current = false;
+                    setDeviceFlow((f) => Object.assign({}, f, {
+                        status: 'error',
+                        error: '设备码已过期，请关闭后重新点击登录'
+                    }));
+                    return;
+                }
+                pollGitHubDeviceToken(d.deviceCode).then((r) => {
+                    if (!deviceFlowBusyRef.current) return;
+                    // 成功：拿 token 取资料并建立会话
+                    if (r && r.access_token) {
+                        return fetchGitHubProfile(r.access_token)
+                            .then((profile) => loginWithGitHub(profile, true))
+                            .then((s) => {
+                                setSession(s);
+                                setUserPanelType(null);
+                                deviceFlowBusyRef.current = false;
+                                setDeviceFlow(null);
+                            });
+                    }
+                    // 用户还没确认：继续等
+                    if (r && r.error === 'authorization_pending') {
+                        deviceFlowTimerRef.current = setTimeout(tick, interval * 1000);
+                        return undefined;
+                    }
+                    // 轮询过快：按 GitHub 要求拉长间隔
+                    if (r && r.error === 'slow_down') {
+                        interval += 5;
+                        deviceFlowTimerRef.current = setTimeout(tick, interval * 1000);
+                        return undefined;
+                    }
+                    // 其余都是终止性错误（access_denied / expired_token / …）
+                    deviceFlowBusyRef.current = false;
+                    setDeviceFlow((f) => Object.assign({}, f, {
+                        status: 'error',
+                        error: (r && (r.error_description || r.error)) || '授权失败，请重试'
+                    }));
+                    return undefined;
+                }).catch((err) => {
+                    if (!deviceFlowBusyRef.current) return;
+                    deviceFlowBusyRef.current = false;
+                    setDeviceFlow((f) => Object.assign({}, f, {
+                        status: 'error',
+                        error: err && err.message ? err.message : String(err)
+                    }));
+                });
+                return undefined;
+            };
+
+            deviceFlowTimerRef.current = setTimeout(tick, interval * 1000);
         }).catch((err) => {
-            setAuthError(err && err.message ? err.message : String(err));
-            // 验证失败时重置 Turnstile 让用户重试
-            if (authMode === 'register' && window.turnstile && turnstileWidgetId !== null) {
-                try { window.turnstile.reset(turnstileWidgetId); } catch (e) { /* ignore */ }
-            }
-            if (authMode === 'register') setTurnstileToken('');
-        }).then(() => {
-            setAuthBusy(false);
+            deviceFlowBusyRef.current = false;
+            setDeviceFlow({
+                status: 'error',
+                userCode: '',
+                verificationUri: '',
+                error: err && err.message ? err.message : String(err)
+            });
         });
-    }, [authMode, authUser, authPass, authPass2, authEmail, authCode, authRemember, turnstileToken, turnstileWidgetId]);
+    }, []);
+
+    // 点「GitHub 登录」：先过用户条款，再启动 Device Flow。
+    // 未同意时先把意图记下并弹条款窗，用户点「同意并继续」后自动接着走 Device Flow，
+    // 不需要他再点一次登录。
+    const handleGitHubLogin = useCallback(() => {
+        if (!legalAgreed) {
+            pendingLoginRef.current = true;
+            setLegalModal('terms');
+            return;
+        }
+        startDeviceFlow();
+    }, [legalAgreed, startDeviceFlow]);
+
+    // 卸载时停掉轮询，避免组件销毁后 setState
+    useEffect(() => () => {
+        if (deviceFlowTimerRef.current) clearTimeout(deviceFlowTimerRef.current);
+        deviceFlowBusyRef.current = false;
+    }, []);
 
     const handleLogout = useCallback(() => {
         // 切换账号前保存当前会话（支持一键切回）
         if (session) savePrevSession(session);
         authLogout();
+        stopDeviceFlow(); // 若授权流程还在轮询，一并取消
         setSession(null);
         setUserPanelType(null);
         setPrevSession(getPrevSession());
-    }, [session]);
+    }, [session, stopDeviceFlow]);
 
-    // 切换账号：记住当前 → 退出 → 打开登录弹窗
+    // 切换账号：记住当前 → 退出 → 直接走 GitHub 授权
     const handleSwitchAccount = useCallback(() => {
         if (session) savePrevSession(session);
         authLogout();
+        // 必须先停掉上一轮授权：deviceFlowBusyRef 为 true 时 handleGitHubLogin
+        // 会直接 return，否则「切换账号」会静默失效。
+        stopDeviceFlow();
         setSession(null);
         setUserPanelType(null);
         setPrevSession(getPrevSession());
-        setAuthMode('login');
-        setAuthError('');
-        setShowAuthModal(true);
-    }, [session]);
+        handleGitHubLogin();
+    }, [session, handleGitHubLogin, stopDeviceFlow]);
 
     // 一键切回到上一个账号
     const handleSwitchBack = useCallback(() => {
@@ -3274,68 +4421,6 @@ const ExtensionBuilderInner = () => {
             setShowAccountSwitcher(false);
         }
     }, [session]);
-
-    // 用 GitHub 登录：打开授权弹窗，回调通过后由 postMessage 把用户资料送回（见下方 message 监听）
-    const handleGitHubLogin = useCallback(() => {
-        if (typeof window === 'undefined') return;
-        // state 带 'g:' 前缀 + btoa(编辑器地址)：回调页据此回传 github-auth 给本窗口；
-        // 若 opener 不可用（浏览器 COOP / 弹窗拦截），回调页还会兜底跳回编辑器并把会话放在 URL hash 里
-        let state;
-        try {
-            state = 'g:' + btoa(window.location.origin + '/') + '~' + makeGitHubState();
-        } catch (e) {
-            state = makeGitHubState();
-        }
-        githubStateRef.current = state;
-        setAuthError('');
-        const url = buildGitHubAuthUrl(state);
-        let popup = null;
-        try {
-            popup = window.open(url, 'github-oauth', 'width=600,height=720');
-        } catch (e) {
-            popup = null;
-        }
-        if (!popup) {
-            setAuthError('浏览器拦截了登录弹窗，请允许本站弹出窗口后重试');
-        }
-    }, []);
-
-    // 监听 GitHub 回调弹窗回传的登录结果（防 CSRF：校验来源 + state）
-    useEffect(() => {
-        function onGitHubMessage(e) {
-            if (!e.data || e.data.type !== 'github-auth') return;
-            const ALLOWED = [
-                'https://scratchextensioneditor.cc.cd',
-                'https://scratchextensioneditor.pages.dev'
-            ];
-            if (ALLOWED.indexOf(e.origin) === -1) return;
-            if (e.data.state !== githubStateRef.current) {
-                setAuthError('GitHub 登录校验失败（state 不匹配）');
-                return;
-            }
-            if (e.data.error) {
-                setAuthError('GitHub 登录失败：' + e.data.error);
-                return;
-            }
-            loginWithGitHub(e.data.profile, authRemember)
-                .then((s) => {
-                    setSession(s);
-                    setShowAuthModal(false);
-                    setAuthUser(''); setAuthPass(''); setAuthPass2('');
-                    setAuthEmail(''); setAuthCode('');
-                    setTurnstileToken('');
-                })
-                .catch((err) => setAuthError(err && err.message ? err.message : String(err)));
-        }
-        if (typeof window !== 'undefined') {
-            window.addEventListener('message', onGitHubMessage);
-        }
-        return () => {
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('message', onGitHubMessage);
-            }
-        };
-    }, [authRemember]);
 
     // 接收来自 scratchextensioneditor.cc.cd 网站的登录会话（跨域：网站登录后 postMessage 给编辑器）
     // 处理两种消息类型：
@@ -3553,73 +4638,7 @@ const ExtensionBuilderInner = () => {
         setPrevSession(null);
         setShowUserMenu(false);
         setUserPanelType(null);
-        setAuthError('');
     }, []);
-
-    // ---- Cloudflare Turnstile：注册模式打开时加载 SDK 并渲染 widget ----
-    useEffect(() => {
-        if (!showAuthModal || authMode !== 'register') return;
-        let mounted = true;
-        let retryTimer = null;
-
-        const tryRender = (attempt) => {
-            if (!mounted) return;
-            const el = turnstileContainerRef.current || document.getElementById('ext-turnstile-container');
-            if (!el) {
-                if (attempt < 20) {
-                    retryTimer = setTimeout(() => tryRender(attempt + 1), 200);
-                }
-                return;
-            }
-            if (!window.turnstile) {
-                if (attempt < 30) {
-                    retryTimer = setTimeout(() => tryRender(attempt + 1), 300);
-                } else {
-                    console.warn('[Turnstile] SDK 未加载');
-                }
-                return;
-            }
-            if (el.hasChildNodes() && turnstileWidgetId !== null) return;
-            try {
-                const wid = window.turnstile.render(el, {
-                    sitekey: TURNSTILE_SITEKEY,
-                    theme: 'light',
-                    callback: (token) => { if (mounted) setTurnstileToken(token); },
-                    'expired-callback': () => { if (mounted) setTurnstileToken(''); },
-                    'error-callback': () => { if (mounted) setTurnstileToken(''); }
-                });
-                if (mounted) setTurnstileWidgetId(wid);
-            } catch (err) {
-                console.error('[Turnstile] render 失败:', err);
-                if (attempt < 10) retryTimer = setTimeout(() => tryRender(attempt + 1), 300);
-            }
-        };
-
-        if (!window.turnstile) {
-            const script = document.createElement('script');
-            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&hl=zh-cn';
-            script.async = true;
-            script.onload = () => {
-                if (!mounted) return;
-                setTurnstileLoaded(true);
-                tryRender(0);
-            };
-            script.onerror = (e) => console.error('[Turnstile] SDK 加载失败:', e);
-            document.head.appendChild(script);
-        } else {
-            setTurnstileLoaded(true);
-            tryRender(0);
-        }
-
-        return () => {
-            mounted = false;
-            if (retryTimer) clearTimeout(retryTimer);
-            if (window.turnstile && turnstileWidgetId !== null) {
-                try { window.turnstile.remove(turnstileWidgetId); } catch (e) { /* ignore */ }
-            }
-            if (mounted) { setTurnstileWidgetId(null); setTurnstileToken(''); }
-        };
-    }, [showAuthModal, authMode]);
 
     // 保存当前项目为新存档
     const handleSaveProject = useCallback(() => {
@@ -3647,8 +4666,8 @@ const ExtensionBuilderInner = () => {
     const handleQuickSave = useCallback(() => {
         setShowFileMenu(false);
         if (!session) {
-            const r = encodeURIComponent(window.location.href);
-            window.open('https://scratchextensioneditor.cc.cd/login?return=' + r, '_blank');
+            // 未登录：直接走 GitHub 授权（不再跳网站登录页）
+            handleGitHubLogin();
             return;
         }
         try {
@@ -3666,7 +4685,7 @@ const ExtensionBuilderInner = () => {
         } catch (err) {
             alert('保存失败：' + (err.message || err));
         }
-    }, [session, extInfo, customBlocks, generatedCode, refreshSaves, saveCurrentWorkspace]);
+    }, [session, extInfo, customBlocks, generatedCode, refreshSaves, saveCurrentWorkspace, handleGitHubLogin]);
 
     // 用当前项目覆盖已有存档
     const handleOverwriteSave = useCallback((saveId) => {
@@ -3715,9 +4734,13 @@ const ExtensionBuilderInner = () => {
                     : bt === 'HAT' ? 'HAT'
                         : bt === 'CONDITIONAL' ? 'CONDITIONAL' : 'COMMAND';
             t._text = '[' + (cb.name || 'block') + ']';
-            // 同步积木颜色（hex 或默认 290 紫色）
+            // 同步积木颜色：自定义色 > 扩展主题色（getInfo().color1）。
+            // 这里必须用 resolveBlockColour —— 早期版本写死 `cb.colour || 290`，
+            // 导致用户一改任何属性就把工作区积木刷回紫色，与预览/导出不一致。
             if (t.setColour) {
-                try { t.setColour(cb.colour || 290); } catch (e) { /* 忽略非法色 */ }
+                try {
+                    t.setColour(resolveBlockColour(cb, extColor1Ref.current));
+                } catch (e) { /* 忽略非法色 */ }
             }
             // 定义块禁止删除（覆盖从 XML 存档恢复的块）
             if (t.setDeletable) t.setDeletable(false);
@@ -3735,7 +4758,9 @@ const ExtensionBuilderInner = () => {
         try {
             setGeneratedCode(javascriptGenerator.workspaceToCode(ws));
         } catch (e) { /* silent */ }
-    }, [customBlocks, workspaceLoaded]);
+        // 依赖里必须含 extInfo.color1：用户在设置里换主题色后，
+        // 工作区积木要立即跟着换色（预览走自己的 effect，导出走 useMemo）。
+    }, [customBlocks, workspaceLoaded, extInfo.color1]);
 
     // 用存档中的积木列表 + 工作区 XML 重建当前 Blockly 工作区
     const rebuildWorkspaceFromState = useCallback((blocks, xmlMap) => {
@@ -3754,10 +4779,10 @@ const ExtensionBuilderInner = () => {
                     B.Xml.domToWorkspace(dom, ws);
                 } catch (e) {
                     console.warn('Restore XML failed, adding starter blocks instead:', e);
-                    blocks.forEach(b => addStarterBlocks(ws, B, b.name, b.id, b.blockType));
+                    blocks.forEach(b => addStarterBlocks(ws, B, b.name, b.id, b.blockType, b.colour));
                 }
             } else {
-                blocks.forEach(b => addStarterBlocks(ws, B, b.name, b.id, b.blockType));
+                blocks.forEach(b => addStarterBlocks(ws, B, b.name, b.id, b.blockType, b.colour));
             }
             rehydrateBlockMeta(ws, blocks);
             try {
@@ -3951,6 +4976,47 @@ const ExtensionBuilderInner = () => {
                             </div>
                         )}
                     </div>
+                    {/* 编辑下拉菜单（对齐 Bilup：恢复/撤销/重做 + 制作积木入口） */}
+                    <div className="ext-tools-dropdown" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setShowEditMenu(false); }}>
+                        <button
+                            className="ext-menu-btn"
+                            onClick={() => setShowEditMenu(v => !v)}
+                            title="编辑"
+                        >
+                            <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            <span className="ext-menu-btn-label">编辑</span>
+                            <span className="ext-menu-arrow">▾</span>
+                        </button>
+                        {showEditMenu && (
+                            <div className="ext-tools-menu">
+                                <button className="ext-tools-menu-item" onClick={() => { setShowEditMenu(false); handleOpenSavesPanel(); }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                                    恢复
+                                    <span style={{marginLeft:'auto',fontSize:11,color:'#9aa0a6'}}>存档</span>
+                                </button>
+                                <button className="ext-tools-menu-item" onClick={() => { setShowEditMenu(false); handleUndo(); }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H13"/></svg>
+                                    撤销
+                                    <span style={{marginLeft:'auto',fontSize:11,color:'#9aa0a6'}}>Ctrl+Z</span>
+                                </button>
+                                <button className="ext-tools-menu-item" onClick={() => { setShowEditMenu(false); handleRedo(); }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><polyline points="17,1 21,5 17,9"/><path d="M3 11V9a4 4 0 014-4h14"/></svg>
+                                    重做
+                                    <span style={{marginLeft:'auto',fontSize:11,color:'#9aa0a6'}}>Ctrl+Y</span>
+                                </button>
+                                <div className="ext-user-menu-divider"></div>
+                                <button className="ext-tools-menu-item" onClick={() => { setShowEditMenu(false); setShowBlockBuilder(true); setBuilderMinimized(false); setBuilderMaximized(false); setBuilderModalPos(null); setBuilderSize(null); }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                                    制作积木
+                                </button>
+                                <button className="ext-tools-menu-item" onClick={() => { setShowEditMenu(false); handleOpenDebugger(); }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/><circle cx="12" cy="12" r="3"/></svg>
+                                    调试器
+                                    <span style={{marginLeft:'auto',fontSize:11,color:'#9aa0a6'}}>在线测试</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button className="ext-menu-btn" onClick={handleOpenSettings} title="编辑器设置与插件管理">
                         <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                         <span className="ext-menu-btn-label">设置</span>
@@ -3979,11 +5045,11 @@ const ExtensionBuilderInner = () => {
                         <React.Fragment>
                             <button
                                 className="ext-menu-btn"
-                                onClick={() => { var r = encodeURIComponent(window.location.href); window.open('https://scratchextensioneditor.cc.cd/login?return=' + r, '_blank'); }}
-                                title="前往网站登录，登录后回到本编辑器即可自动同步"
+                                onClick={handleGitHubLogin}
+                                title="使用 GitHub 账号登录"
                             >
-                                <span className="ext-menu-btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
-                                <span className="ext-menu-btn-label">登录</span>
+                                <span className="ext-menu-btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/></svg></span>
+                                <span className="ext-menu-btn-label">GitHub 登录</span>
                             </button>
                         </React.Fragment>
                     ) : (
@@ -4045,41 +5111,10 @@ const ExtensionBuilderInner = () => {
                 </div>
             </div>
 
-            {/* Left icon rail (mimics AstraEditor: 制作积木 button pinned to far left) */}
-            <div className="ext-builder-left">
-                <button
-                    className={`ext-left-btn ${showBlockBuilder ? 'active' : ''}`}
-                    onClick={() => { setShowBlockBuilder(true); setBuilderMinimized(false); setBuilderMaximized(false); setBuilderModalPos(null); setBuilderSize(null); }}
-                    title="制作积木"
-                >
-                    <img
-                        src="/make-blocks-btn.png"
-                        alt="制作积木"
-                        className="ext-left-btn-img"
-                    />
-                </button>
-            </div>
-
-            {/* Right side: tab bar + main area */}
+            {/* Right side: main area */}
             <div className="ext-builder-right">
-                {/* Tab bar */}
-                <div className="ext-builder-tabs">
-                    <button
-                        className={`ext-tab ${activeTab === 'editor' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('editor')}
-                    >
-                        <span className="ext-tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><path d="M14 4l-4 16"/></svg></span>
-                        代码
-                    </button>
-                    <button
-                        className={`ext-tab ${activeTab === 'debugger' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('debugger')}
-                    >
-                        <span className="ext-tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/><circle cx="12" cy="12" r="3"/></svg></span>
-                        调试器
-                    </button>
-                </div>
-
+                {/* 标签栏已移除：「代码」与「调试器」两个入口现在分别在
+                    右侧常驻代码面板与「编辑」下拉菜单里，不再需要顶部标签。 */}
                 <div className="ext-builder-main">
                 {/* Block builder as a floating window (opens via 制作积木 button) */}
                 {showBlockBuilder && (
@@ -4432,7 +5467,9 @@ const ExtensionBuilderInner = () => {
                     <div ref={blocklyDivRef} className="blockly-host" />
                 </div>
 
-                {/* Right code panel */}
+                {/* Right panel：JavaScript 代码常驻显示。
+                    调试器是独立悬浮窗，不再占用这里，所以打开/关闭调试器
+                    都不会让代码面板消失。 */}
                 <div className="ext-builder-stage">
                     <div className="ext-stage-header">
                         <span className="ext-stage-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign:'middle',marginRight:'6px'}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>JavaScript 代码</span>
@@ -4527,8 +5564,9 @@ const ExtensionBuilderInner = () => {
                         </div>
                     </div>
 
-                        {/* 标签页栏 */}
-                        <div className="ext-settings-tabs" onMouseDown={handleSettingsHeaderMouseDown}>
+                        {/* 主体：左侧竖排标签栏 + 右侧内容面板 */}
+                        <div className="ext-settings-body">
+                        <div className="ext-settings-sidebar">
                             <button
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'editor' ? 'active' : ''}`}
@@ -4545,6 +5583,7 @@ const ExtensionBuilderInner = () => {
                                 onClick={() => { setSettingsTab('addons'); handleOpenMarket(); }}
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><rect x="3" y="3" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v7"/><path d="M16 3v7"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="12" y1="12" x2="12" y2="18"/></svg>插件市场</button>
                         </div>
+                        <div className="ext-settings-panes">
 
                         {/* ===== 编辑器设置标签页 ===== */}
                         {settingsTab === 'editor' && (
@@ -4908,6 +5947,8 @@ const ExtensionBuilderInner = () => {
                                 )}
                             </div>
                         )}
+                        </div>
+                        </div>
                     </div>
                 </React.Fragment>
             )}
@@ -4960,129 +6001,157 @@ const ExtensionBuilderInner = () => {
                 </div>
             )}
 
-            {/* 登录 / 注册 弹窗 */}
-            {showAuthModal && (
+            {/* GitHub Device Flow 授权弹窗：显示用户码 + 轮询状态。
+                没有用户名/密码表单，也不需要回调页，全程在本页完成。 */}
+            {deviceFlow && (
                 <div
                     className="ext-auth-backdrop"
-                    onClick={(e) => { if (e.target === e.currentTarget) setShowAuthModal(false); }}
+                    onClick={(e) => { if (e.target === e.currentTarget) stopDeviceFlow(); }}
                 >
-                    <div className="ext-auth-card">
+                    <div className="ext-auth-card ext-device-card">
                         <div className="ext-auth-header">
                             <span className="ext-auth-title">
-                                {authMode === 'login' ? <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign:'middle',marginRight:'6px'}}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>登录</> : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign:'middle',marginRight:'6px'}}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>注册</>}
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{verticalAlign:'middle',marginRight:'6px'}}><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+                                GitHub 登录
                             </span>
                             <button
                                 type="button"
                                 className="ext-builder-modal-close"
-                                onClick={() => setShowAuthModal(false)}
+                                onClick={stopDeviceFlow}
+                                aria-label="关闭"
+                                title="取消登录"
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                        </div>
+                        <div className="ext-device-body">
+                            {deviceFlow.status === 'starting' && (
+                                <div className="ext-device-hint">正在向 GitHub 申请设备码…</div>
+                            )}
+
+                            {deviceFlow.status === 'waiting' && (
+                                <React.Fragment>
+                                    <div className="ext-device-hint">
+                                        在 GitHub 页面输入下面的用户码并确认授权：
+                                    </div>
+                                    <div className="ext-device-code-row">
+                                        <code className="ext-device-code">{deviceFlow.userCode}</code>
+                                        <button
+                                            type="button"
+                                            className="ext-device-copy"
+                                            onClick={() => {
+                                                const t = deviceFlow.userCode;
+                                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                    navigator.clipboard.writeText(t).catch(() => {});
+                                                } else {
+                                                    const ta = document.createElement('textarea');
+                                                    ta.value = t;
+                                                    document.body.appendChild(ta);
+                                                    ta.select();
+                                                    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+                                                    document.body.removeChild(ta);
+                                                }
+                                            }}
+                                        >复制</button>
+                                    </div>
+                                    <div className="ext-device-steps">
+                                        <ol>
+                                            <li>已尝试自动打开 <code>github.com/login/device</code>；若没打开，点下面的按钮。</li>
+                                            <li>粘贴上面的用户码，点「Continue」。</li>
+                                            <li>点「Authorize」同意授权，本页会自动完成登录。</li>
+                                        </ol>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="ext-auth-btn"
+                                        onClick={() => window.open(deviceFlow.verificationUri, 'github-device', 'width=600,height=720')}
+                                    >打开 GitHub 授权页</button>
+                                    <div className="ext-device-waiting">
+                                        <span className="ext-device-spinner" aria-hidden="true"></span>
+                                        等待授权中…（本窗口保持打开即可）
+                                    </div>
+                                    {/* 条款已在发起授权前确认过，这里只留可随时回看的入口 */}
+                                    <div className="ext-legal-foot">
+                                        你已同意
+                                        <button type="button" className="ext-legal-link" onClick={() => setLegalModal('terms')}>《用户协议》</button>
+                                        与
+                                        <button type="button" className="ext-legal-link" onClick={() => setLegalModal('privacy')}>《隐私政策》</button>
+                                    </div>
+                                </React.Fragment>
+                            )}
+
+                            {deviceFlow.status === 'error' && (
+                                <React.Fragment>
+                                    <div className="ext-auth-error">{deviceFlow.error}</div>
+                                    <div className="ext-device-hint">
+                                        若提示 <code>device_flow_disabled</code>，请到 GitHub → Settings → Developer settings
+                                        → OAuth Apps → 你的应用，勾选 <b>Enable Device Flow</b> 后重试。
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="ext-auth-btn"
+                                        onClick={() => { stopDeviceFlow(); handleGitHubLogin(); }}
+                                    >重试</button>
+                                </React.Fragment>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 用户协议 / 隐私政策弹窗。
+                从登录流程或授权弹窗里的链接打开；正文来自 lib/legal-docs.js，
+                与网站上的条款页是同一份内容，不再把人踢去别的域名。 */}
+            {legalModal && LEGAL_DOCS[legalModal] && (
+                <div
+                    className="ext-legal-backdrop"
+                    onClick={(e) => { if (e.target === e.currentTarget) setLegalModal(null); }}
+                >
+                    <div className="ext-legal-card">
+                        <div className="ext-auth-header">
+                            <span className="ext-auth-title">{LEGAL_DOCS[legalModal].title}</span>
+                            <button
+                                type="button"
+                                className="ext-builder-modal-close"
+                                onClick={() => setLegalModal(null)}
                                 aria-label="关闭"
                                 title="关闭"
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                         </div>
-                        <form className="ext-auth-form" onSubmit={handleAuthSubmit}>
-                                {authMode === 'register' && (
-                                    <React.Fragment>
-                                        <label className="ext-auth-label">邮箱</label>
-                                        <input
-                                            className="ext-auth-input"
-                                            type="email"
-                                            value={authEmail}
-                                            onChange={(e) => setAuthEmail(e.target.value)}
-                                            placeholder="输入邮箱地址"
-                                            autoFocus
-                                        />
-                                        <label className="ext-auth-label">邮箱验证码</label>
-                                        <div className="ext-auth-code-row">
-                                            <input
-                                                className="ext-auth-input ext-auth-code-input"
-                                                type="text"
-                                                inputMode="numeric"
-                                                maxLength={6}
-                                                value={authCode}
-                                                onChange={(e) => setAuthCode(e.target.value.replace(/\D/g, ''))}
-                                                placeholder="请输入 6 位验证码"
-                                                autoComplete="one-time-code"
-                                            />
-                                            <button
-                                                type="button"
-                                                className="ext-auth-code-btn"
-                                                onClick={handleSendCode}
-                                                disabled={codeSending || codeCountdown > 0}
-                                            >
-                                                {codeSending ? '发送中…' : (codeCountdown > 0 ? `${codeCountdown}秒后重发` : '发送验证码')}
-                                            </button>
-                                        </div>
-                                        {devCode && (
-                                            <div style={{fontSize:12, color:'#059669', marginTop:2, fontWeight:600}}>
-                                                验证码（调试用）：{devCode}
-                                            </div>
-                                        )}
-                                    </React.Fragment>
-                                )}
-                                <label className="ext-auth-label">用户名</label>
-                                <input
-                                    className="ext-auth-input"
-                                    value={authUser}
-                                    onChange={(e) => setAuthUser(e.target.value)}
-                                    placeholder="输入用户名"
-                                    autoFocus={authMode !== 'register'}
-                                />
-                                <label className="ext-auth-label">密码</label>
-                                <input
-                                    className="ext-auth-input"
-                                    type="password"
-                                    value={authPass}
-                                    onChange={(e) => setAuthPass(e.target.value)}
-                                    placeholder={authMode === 'register' ? '至少 4 个字符' : '输入密码'}
-                                />
-                                {authMode === 'register' && (
-                                    <React.Fragment>
-                                        <label className="ext-auth-label">确认密码</label>
-                                        <input
-                                            className="ext-auth-input"
-                                            type="password"
-                                            value={authPass2}
-                                            onChange={(e) => setAuthPass2(e.target.value)}
-                                            placeholder="再次输入密码"
-                                        />
-                                        {/* Cloudflare Turnstile 人机验证 */}
-                                        <div id="ext-turnstile-container" className="ext-turnstile-container" ref={turnstileContainerRef}></div>
-                                    </React.Fragment>
-                                )}
-                                {authError && <div className="ext-auth-error">{authError}</div>}
-                                <label className="ext-auth-remember" title="勾选后 30 天内打开本网站自动登录，无需重复输入密码">
-                                    <input
-                                        type="checkbox"
-                                        checked={authRemember}
-                                        onChange={(e) => setAuthRemember(e.target.checked)}
-                                    />
-                                    <span>自动登录（记住我，30 天内免登录）</span>
-                                </label>
-                                <button className="ext-auth-btn" type="submit" disabled={authBusy}>
-                                    {authBusy ? '请稍候…' : (authMode === 'login' ? '登录' : '注册并登录')}
-                                </button>
-                                <div className="ext-auth-divider"><span>或</span></div>
+
+                        <div className="ext-legal-body">
+                            <div className="ext-legal-meta">更新日期：{LEGAL_DOCS[legalModal].updated}</div>
+                            <p className="ext-legal-intro">{LEGAL_DOCS[legalModal].intro}</p>
+                            {LEGAL_DOCS[legalModal].sections.map((sec) => (
+                                <div className="ext-legal-section" key={sec.h}>
+                                    <h3 className="ext-legal-h">{sec.h}</h3>
+                                    {sec.p.map((para, i) => (
+                                        <p className="ext-legal-p" key={i}>{para}</p>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="ext-legal-actions">
+                            {legalModal === 'terms' && !legalAgreed && (
                                 <button
                                     type="button"
-                                    className="ext-auth-github-btn"
-                                    onClick={handleGitHubLogin}
-                                >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{verticalAlign:'middle',marginRight:'8px'}}>
-                                        <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/>
-                                    </svg>
-                                    使用 GitHub 登录
-                                </button>
-                                <button
-                                    type="button"
-                                    className="ext-auth-switch"
+                                    className="ext-legal-agree"
                                     onClick={() => {
-                                        setAuthMode(authMode === 'login' ? 'register' : 'login');
-                                        setAuthError('');
+                                        setLegalAgreed(true);
+                                        setLegalModal(null);
+                                        // 用户本意是登录，被条款拦下的：同意后直接接着走
+                                        if (pendingLoginRef.current) {
+                                            pendingLoginRef.current = false;
+                                            startDeviceFlow();
+                                        }
                                     }}
-                                >
-                                    {authMode === 'login' ? '没有账号？去注册' : '已有账号？去登录'}
-                                </button>
-                            </form>
+                                >同意并继续</button>
+                            )}
+                            <button
+                                type="button"
+                                className="ext-legal-close"
+                                onClick={() => { pendingLoginRef.current = false; setLegalModal(null); }}
+                            >关闭</button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -5487,6 +6556,71 @@ const ExtensionBuilderInner = () => {
                 </React.Fragment>
             )}
 
+            {/* 调试器（悬浮框，可拖拽/拉伸/最大化/最小化/关闭） */}
+            {showDebuggerPanel && (
+                <React.Fragment>
+                {!debuggerMinimized && !debuggerMaximized && (
+                    <div className="ext-float-resize-layer" ref={debuggerResizeLayerRef}>
+                        {['n','s','e','w','ne','nw','se','sw'].map(dir => (
+                            <div
+                                key={dir}
+                                className={`ext-float-resize-handle ext-fz-${dir}`}
+                                onMouseDown={handleDebuggerResizeDown(dir)}
+                            />
+                        ))}
+                    </div>
+                )}
+                <div
+                    ref={debuggerPanelRef}
+                    className={`ext-float-panel ext-debugger-panel${debuggerMinimized ? ' ext-float-minimized' : ''}${debuggerMaximized ? ' maximized' : ''}`}
+                    style={{
+                        left: debuggerFloatBounds.x,
+                        top: debuggerFloatBounds.y,
+                        width: debuggerFloatBounds.w,
+                        height: debuggerFloatBounds.h,
+                        display: debuggerMinimized ? 'none' : '',
+                        zIndex: getZIndex('debugger')
+                    }}
+                    onMouseDown={(e) => { bringToFront('debugger'); handleDebuggerHeaderMouseDown(e); }}
+                >
+                    <div className="ext-float-header" onMouseDown={handleDebuggerHeaderMouseDown}>
+                        <span className="ext-float-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'6px'}}>
+                                <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            调试器
+                        </span>
+                        <div className="ext-float-btns">
+                            <button
+                                type="button"
+                                className="ext-float-btn"
+                                onClick={handleDebuggerToggleMin}
+                                aria-label="最小化"
+                                title="最小化"
+                            >−</button>
+                            <button
+                                type="button"
+                                className="ext-float-btn"
+                                onClick={handleDebuggerToggleMax}
+                                aria-label={debuggerMaximized ? '还原' : '最大化'}
+                                title={debuggerMaximized ? '还原' : '最大化'}
+                            >{debuggerMaximized ? '❐' : '□'}</button>
+                            <button
+                                type="button"
+                                className="ext-float-btn ext-float-btn-close"
+                                onClick={handleCloseDebugger}
+                                aria-label="关闭"
+                                title="关闭"
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                        </div>
+                    </div>
+                    <div className="ext-float-body">
+                        <DebuggerPanel code={exportableCode} />
+                    </div>
+                </div>
+                </React.Fragment>
+            )}
+
             {/* 项目数据分析面板（悬浮框，可拖拽/拉伸） */}
             {showStatsPanel && (
                 <React.Fragment>
@@ -5637,16 +6771,17 @@ function wrapAsExtension(extInfo, generatedCode, customBlocks) {
             blockType: b.blockType || 'command',
             arguments: argumentsDef
         };
-        // 积木自定义颜色：同时输出 colour 与 color1/color2/color3。
+        // 积木颜色：与预览 / 工作区共用 resolveBlockColour（自定义色 > 扩展 color1），
+        // 并且**无条件**写出 colour 与 color1/color2/color3。
         // TurboWarp 的 scratch-vm 在 _convertBlockForScratchBlocks 中读取
-        // blockInfo.color1（块级覆盖），不读 colour；官方文档推荐 colour。
-        // 三份都输出，任何解析方式都能生效。color2/color3 由 color1 变暗派生。
-        if (b.colour) {
-            entry.colour = b.colour;
-            entry.color1 = b.colour;
-            entry.color2 = darkenHex(b.colour, 0.85);
-            entry.color3 = darkenHex(b.colour, 0.7);
-        }
+        // blockInfo.color1（块级覆盖），缺省时退回扩展 color1。显式写出可保证
+        // 「预览所见 = 导出后所见」，不会再出现预览/导出颜色不一致。
+        // color2/color3 由 color1 变暗派生。
+        const blockColour = resolveBlockColour(b, extInfo.color1);
+        entry.colour = blockColour;
+        entry.color1 = blockColour;
+        entry.color2 = darkenHex(blockColour, 0.85);
+        entry.color3 = darkenHex(blockColour, 0.7);
         if (b.isTerminal) entry.isTerminal = true;
         // isAsync：用户勾选，或生成的实现方法体含 await（block_define 会为
         // 含 await 的方法自动加 async 前缀并输出 "// isAsync: true" 注释）。
@@ -5705,6 +6840,18 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// 积木颜色的唯一真源：自定义颜色 > 扩展主题色（getInfo().color1）。
+// TurboWarp 渲染扩展积木时，未显式声明颜色的积木会继承扩展的 color1；
+// 工作区 / 预览 / 导出代码必须共用本函数，否则三处颜色会不一致
+// （曾出现：预览按积木类型上色，导出后全部变成扩展主题色）。
+function resolveBlockColour(cb, fallbackColour) {
+    const own = cb && typeof cb.colour === 'string' ? cb.colour.trim() : '';
+    if (/^#[0-9a-fA-F]{6}$/.test(own)) return own;
+    const fallback = typeof fallbackColour === 'string' ? fallbackColour.trim() : '';
+    if (/^#[0-9a-fA-F]{6}$/.test(fallback)) return fallback;
+    return DEFAULT_EXTENSION_INFO.color1;
+}
+
 // 从 hex 颜色按比例变暗，派生 color2/color3（'#RRGGBB' -> '#RRGGBB'）
 function darkenHex(hex, factor) {
     const h = String(hex || '').trim();
@@ -5721,7 +6868,7 @@ function darkenHex(hex, factor) {
  * workspace) and return the wrapped SVG string. Module-level so both the
  * modal preview and the builder-panel preview can reuse it.
  */
-function renderCustomBlockToSvg(ws, cb, idx) {
+function renderCustomBlockToSvg(ws, cb, idx, fallbackColour) {
     if (!ws || !cb) return '';
     const B = window._extBuilderBlockly || window.Blockly;
     if (!B || !B.Blocks) return '';
@@ -5752,13 +6899,15 @@ function renderCustomBlockToSvg(ws, cb, idx) {
         }
     });
 
-    // Choose the scratch block shape + colour by blockType
-    let shapeDef = {colour: 344, id: 'C'};
-    if (cb.blockType === 'reporter') shapeDef = {colour: 270, output: 'Number'};
-    else if (cb.blockType === 'Boolean') shapeDef = {colour: 270, output: 'Boolean'};
-    else if (cb.blockType === 'hat') shapeDef = {colour: 45, id: 'HAT'};
-    // 用户自定义积木颜色覆盖默认色（与 block_define 工作区 / 导出代码一致）
-    if (cb.colour) shapeDef.colour = cb.colour;
+    // Choose the scratch block shape by blockType.
+    let shapeDef = {id: 'C'};
+    if (cb.blockType === 'reporter') shapeDef = {output: 'Number'};
+    else if (cb.blockType === 'Boolean') shapeDef = {output: 'Boolean'};
+    else if (cb.blockType === 'hat') shapeDef = {id: 'HAT'};
+    // 颜色与导出代码共用同一解析规则（自定义色 > 扩展 color1），
+    // 保证「预览所见 = 导出后 TurboWarp 里的实际渲染」。
+    // 注意：不要再按积木类型给不同默认色，TurboWarp 里同扩展的积木默认同色。
+    shapeDef.colour = resolveBlockColour(cb, fallbackColour);
 
     const previewType = (cb.id || ('b' + idx)) + '__preview';
     // Force re-registration so shape / fields changes are reflected live.

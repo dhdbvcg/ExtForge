@@ -264,7 +264,8 @@
 
   /* ---------- footer ---------- */
   footer { border-top: 1px solid var(--glass-brd); padding: 54px 0 34px; margin-top: 40px; }
-  .foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 30px; }
+  /* 四列：品牌 + 产品 + 资源 + 条款 */
+  .foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 30px; }
   .foot-grid h5 { font-size: 14px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 1.4px; margin-bottom: 14px; }
   .foot-grid a { display: block; color: var(--ink-dim); font-size: 14.5px; padding: 5px 0; transition: color .2s; }
   .foot-grid a:hover { color: var(--cyan); }
@@ -641,10 +642,21 @@
         <a href="https://github.com/dhdbvcg/scratch-extension-editor/releases" target="_blank" rel="noopener noreferrer">Release 下载</a>
         <a href="https://github.com/dhdbvcg/scratch-extension-editor/issues" target="_blank" rel="noopener noreferrer">反馈问题</a>
       </div>
+      <div>
+        <h5>条款</h5>
+        <a href="terms/">用户协议</a>
+        <a href="privacy/">隐私政策</a>
+        <a href="login/">账号登录</a>
+      </div>
     </div>
     <div class="foot-bottom">
       <span>© 2026 Scratch 扩展编辑器 · 由 dhdbvcg 维护</span>
-      <span>基于 TurboWarp 技术 · 开源协议 MIT</span>
+      <span>
+        <a href="terms/" style="color:var(--ink-faint);text-decoration:none">用户协议</a>
+        ·
+        <a href="privacy/" style="color:var(--ink-faint);text-decoration:none">隐私政策</a>
+        · 基于 TurboWarp 技术 · 开源协议 MIT
+      </span>
     </div>
   </div>
 </footer>

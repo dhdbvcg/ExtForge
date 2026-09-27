@@ -31,6 +31,9 @@ const MIME_TYPES = {
 const ROOT = __dirname;
 const PORT = 18790;
 
+/** 编辑器插件运行时（app ready 后创建，见 createWindow）。 */
+let pluginRuntime = null;
+
 // 简单静态文件服务器（仅监听 localhost，供 hCaptcha 等 HTTP-origin 服务使用）
 function createServer() {
   return http.createServer((req, res) => {
@@ -47,6 +50,53 @@ function createServer() {
     if (qi !== -1) urlPath = urlPath.substring(0, qi);
     const hi = urlPath.indexOf('#');
     if (hi !== -1) urlPath = urlPath.substring(0, hi);
+    // ── 编辑器插件：清单接口 + Node 服务反代 ──
+    // 网页版走 devServer 的 before 中间件，打包版走这里，两边行为必须一致，
+    // 否则「终端装了插件、网页版能用、装出来的 exe 却看不到」。
+    if (pluginRuntime) {
+      if (urlPath === '/ext-plugins/list') {
+        try {
+          const body = JSON.stringify({
+            ok: true,
+            dir: pluginRuntime.pluginsDir,
+            plugins: pluginRuntime.listPlugins(),
+          });
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+          });
+          res.end(body);
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: false, error: String((e && e.message) || e) }));
+        }
+        return;
+      }
+
+      // 路由表里的前缀是插件自报的完整路径（如 /deepseek-web-vision/api），
+      // 命中就整段透传，插件子进程自己解析剩余部分。
+      const pluginPort = pluginRuntime.portFor(urlPath);
+      if (pluginPort) {
+        const up = http.request({
+          hostname: '127.0.0.1',
+          port: pluginPort,
+          path: req.url,
+          method: req.method,
+          headers: Object.assign({}, req.headers, { host: '127.0.0.1:' + pluginPort }),
+        }, (r) => {
+          res.writeHead(r.statusCode || 502, r.headers);
+          r.pipe(res);
+        });
+        up.on('error', (e) => {
+          if (res.headersSent) { res.end(); return; }
+          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: false, error: '插件服务不可达：' + String((e && e.message) || e) }));
+        });
+        req.pipe(up);
+        return;
+      }
+    }
+
     if (urlPath === '/' || urlPath === '') urlPath = '/index.html';
 
     const filePath = path.join(ROOT, urlPath);
@@ -69,6 +119,28 @@ function createServer() {
 
 async function createWindow() {
   await app.whenReady();
+
+  // ── 编辑器插件运行时 ──
+  // 插件装在 userData/plugins/（= %APPDATA%\scratch-extension-editor\plugins，
+  // 与 devServer 侧算出来的路径一致）。带 server.mjs / server.js 的插件会被
+  // fork 成独立子进程，它回报的端口由 pluginRuntime 记成一张路由表，
+  // 上面的 HTTP server 据此把请求反代过去。
+  if (!pluginRuntime) {
+    try {
+      pluginRuntime = require('./ext-plugin-runtime')({
+        pluginsDir: path.join(app.getPath('userData'), 'plugins'),
+        dataDir: app.getPath('userData'),
+        // 随编辑器分发的内置插件。首次启动时由运行时铺到 plugins/ ——
+        // 用户装完编辑器，插件目录是空的，得有人替他放进去。
+        bundledDir: path.join(__dirname, 'plugins-src'),
+        log: (...a) => console.log(...a),
+      });
+      pluginRuntime.start();
+    } catch (e) {
+      // 插件系统坏了不该让编辑器打不开
+      console.error('[ext-plugins] 运行时初始化失败:', (e && e.message) || e);
+    }
+  }
 
   const server = createServer();
   await new Promise((resolve, reject) => {

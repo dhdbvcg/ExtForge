@@ -748,10 +748,71 @@ export function removeCustomAddon(id) {
 
 
 /**
- * 内置插件 + 自定义插件（运行时合并，用于列表渲染与激活）
+ * 「编辑器数据文件夹」里安装的插件（终端安装的落点）。
+ *
+ * 浏览器读不了本地文件夹，所以由 Node 侧（devServer / Electron main）扫描
+ * %APPDATA%/scratch-extension-editor/plugins/ 后经 /ext-plugins/list 把源码
+ * 送过来，这里编译成与内置插件同形的定义。
+ * 纯网页部署没有这个接口，失败时静默返回空数组。
+ */
+let _dirPlugins = [];
+
+export function getDirPlugins() {
+    return _dirPlugins;
+}
+
+export async function loadDirPlugins() {
+    try {
+        const res = await fetch('/ext-plugins/list', {cache: 'no-store'});
+        if (!res.ok) return [];
+        const data = await res.json();
+        const items = (data && Array.isArray(data.plugins)) ? data.plugins : [];
+        const out = [];
+        for (const it of items) {
+            // 纯 Node 侧插件（只有 server.mjs、没有 index.js）在页面侧没有可执行代码，
+            // 它的界面由别处提供，这里只记一条元信息，不去 eval 空字符串。
+            if (!it.code) {
+                out.push({
+                    id: it.id,
+                    name: it.name,
+                    description: it.description,
+                    category: it.category,
+                    dirPlugin: true,
+                    dirName: it.dir,
+                    dirVersion: it.version || '',
+                    serverOnly: true,
+                    hasServer: !!it.hasServer
+                });
+                continue;
+            }
+            try {
+                const list = evalAddonText(it.code);
+                for (const a of list) {
+                    out.push(Object.assign({}, a, {
+                        dirPlugin: true,
+                        dirName: it.dir,
+                        dirVersion: it.version || '',
+                        hasServer: !!it.hasServer
+                    }));
+                }
+            } catch (e) {
+                console.warn('[ExtAddons] 目录插件「' + (it && it.id) + '」解析失败:', e);
+            }
+        }
+        // serverOnly 条目没有 setup，补一个空实现，免得下游 applyExtAddons 判空。
+        _dirPlugins = out.map(a => a.serverOnly ? a : Object.assign({}, a, {setup: rehydrateSetup(a)}));
+        console.log('[ExtAddons] 从数据目录加载插件:', _dirPlugins.map(a => a.id).join(', ') || '(无)');
+        return _dirPlugins;
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * 内置插件 + 数据目录插件 + 自定义插件（运行时合并，用于列表渲染与激活）
  */
 export function getAllAddons() {
-    return [...EXT_ADDONS, ...loadCustomAddons()];
+    return [...EXT_ADDONS, ..._dirPlugins, ...loadCustomAddons()];
 }
 
 /**
@@ -764,8 +825,17 @@ export function getAddonState() {
     } catch (e) { saved = {}; }
     const state = {};
     getAllAddons().forEach(a => {
-        // 自定义插件默认关闭（不在 DEFAULT_STATE 里）；内置插件用 DEFAULT_STATE 默认值
-        state[a.id] = saved[a.id] === undefined ? !!DEFAULT_STATE[a.id] : !!saved[a.id];
+        // 默认值三档：
+        //   - 数据目录插件（终端安装进来的）：默认开启 —— 用户既然把它装进文件夹，
+        //     意图就是「装上就用」，还要再去勾一次不合理；
+        //   - 内置插件：用 DEFAULT_STATE 的默认值；
+        //   - 自定义插件（浏览器里导入的）：默认关闭，避免误装即生效。
+        // 无论哪一档，用户手动改过（saved 里有值）就一律以用户的为准。
+        const def = a.dirPlugin ? true : !!DEFAULT_STATE[a.id];
+        // serverOnly 插件没有浏览器侧副作用，开关只表示「服务要不要跑」，
+        // 由 Node 侧决定，这里给它固定 true 以免列表里显示成灰色未启用。
+        if (a.serverOnly) { state[a.id] = saved[a.id] === undefined ? true : !!saved[a.id]; return; }
+        state[a.id] = saved[a.id] === undefined ? def : !!saved[a.id];
     });
     return state;
 }

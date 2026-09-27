@@ -643,6 +643,103 @@ const GITHUB_SCOPE = 'user:email';
 // 必须与该 GitHub OAuth App 中登记的「Authorization callback URL」完全一致
 const GITHUB_CALLBACK = 'https://scratchextensioneditor.cc.cd/api/github-callback';
 
+// ── GitHub Device Flow（默认登录方式） ──
+// 为什么不用上面的 authorize 重定向流程：那条路必须有服务端用 client_secret
+// 换 token，而现成的服务端只部署在 scratchextensioneditor.cc.cd 上，本地
+// 127.0.0.1 点登录会被弹到线上编辑器去。Device Flow 没有 redirect_uri，
+// token 由浏览器直接轮询换取，因此在任何源（含 localhost）都能完成登录。
+//
+// GitHub 的这两个端点不带 CORS 头，浏览器直连会 Failed to fetch，故走
+// webpack devServer 的同源反代 /github-oauth/*（见 webpack.config.js）。
+// 注意：GitHub Device Flow 需要在 OAuth App 设置里勾选 Enable Device Flow。
+const GITHUB_DEVICE_START = '/github-oauth/device/code';
+const GITHUB_DEVICE_TOKEN = '/github-oauth/oauth/access_token';
+const GITHUB_DEVICE_VERIFY = 'https://github.com/login/device';
+
+/**
+ * 第一步：向 GitHub 申请设备码与用户码。
+ * @returns {Promise<{deviceCode, userCode, verificationUri, expiresIn, interval}>}
+ */
+export function startGitHubDeviceFlow() {
+    return fetch(GITHUB_DEVICE_START, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({client_id: GITHUB_CLIENT_ID, scope: GITHUB_SCOPE})
+    }).then((r) => r.json().catch(() => ({}))).then((d) => {
+        if (!d || !d.device_code) {
+            const msg = (d && (d.error_description || d.error)) || 'GitHub 未返回设备码';
+            throw new Error(msg + '（若提示 device_flow_disabled，请在 GitHub OAuth App 设置里勾选 Enable Device Flow）');
+        }
+        const verify = d.verification_uri || GITHUB_DEVICE_VERIFY;
+        return {
+            deviceCode: d.device_code,
+            userCode: d.user_code,
+            verificationUri: verify,
+            // 带 user_code 预填的授权页：GitHub 会直接填好输入框，用户只需点确认。
+            // 若该参数不被识别也只是被忽略，页面照常可用，故无需探测支持性。
+            verificationUriComplete: verify + '?user_code=' + encodeURIComponent(d.user_code),
+            expiresIn: Number(d.expires_in) || 900,
+            interval: Number(d.interval) || 5
+        };
+    });
+}
+
+/**
+ * 第二步：轮询换取 access_token。
+ * 返回值里 access_token 存在即成功；否则看 error 字段：
+ *   authorization_pending → 用户还没授权，继续等
+ *   slow_down             → 轮询过快，应拉长间隔
+ *   expired_token         → 设备码过期，需重新开始
+ *   access_denied         → 用户拒绝
+ */
+export function pollGitHubDeviceToken(deviceCode) {
+    return fetch(GITHUB_DEVICE_TOKEN, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({
+            client_id: GITHUB_CLIENT_ID,
+            device_code: deviceCode,
+            grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+        })
+    }).then((r) => r.json().catch(() => ({})));
+}
+
+/**
+ * 第三步：用 access_token 拉 GitHub 用户资料（api.github.com 自带 CORS，可直连）。
+ * @returns {Promise<{id, login, name, email, avatar}>}
+ */
+export function fetchGitHubProfile(accessToken) {
+    const headers = {
+        'Authorization': 'Bearer ' + accessToken,
+        'Accept': 'application/vnd.github+json'
+    };
+    return fetch('https://api.github.com/user', {headers: headers})
+        .then((r) => r.json())
+        .then((user) => {
+            if (!user || !user.login) throw new Error('无法获取 GitHub 用户资料');
+            const base = {
+                id: user.id,
+                login: user.login,
+                name: user.name || user.login,
+                email: user.email || '',
+                avatar: user.avatar_url || ''
+            };
+            if (base.email) return base;
+            // 主邮箱为私密时 /user 不带 email，需要单独查 /user/emails
+            return fetch('https://api.github.com/user/emails', {headers: headers})
+                .then((r) => r.json())
+                .then((list) => {
+                    if (Array.isArray(list)) {
+                        const p = list.find((e) => e.primary && e.verified) ||
+                            list.find((e) => e.verified);
+                        if (p) base.email = p.email;
+                    }
+                    return base;
+                })
+                .catch(() => base);
+        });
+}
+
 /**
  * 生成随机 state（CSRF 防护），返回十六进制串。
  */

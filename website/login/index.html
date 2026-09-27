@@ -100,6 +100,25 @@
   }
   .remember input[type="checkbox"] { accent-color: #8b5cf6; width: 16px; height: 16px; }
 
+  /* ---- 用户条款勾选行 ---- */
+  .legal-row {
+    display: flex; align-items: flex-start; gap: 7px;
+    font-size: 12.5px; color: var(--ink-dim); line-height: 1.6;
+    margin: 12px 0 10px; cursor: pointer;
+  }
+  .legal-row input[type="checkbox"] {
+    accent-color: #8b5cf6; width: 15px; height: 15px;
+    margin-top: 2px; flex-shrink: 0;
+  }
+  .legal-row a { color: #8b5cf6; text-decoration: underline; text-underline-offset: 2px; }
+  .legal-row a:hover { color: #7c3aed; }
+  .legal-row.shake { animation: legalShake .32s ease; }
+  @keyframes legalShake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
   .submit {
     width: 100%; padding: 12px; border: none; border-radius: 11px;
     background: var(--grad); color: #fff; font-size: 15.5px; font-weight: 700;
@@ -211,6 +230,31 @@
   var codeTimer = null;
   var codeSending = false;
   var lastLocalCode = '';
+  // 是否已同意用户条款。切 tab 会重建表单 DOM，所以状态存在 JS 变量里。
+  var legalAgreed = false;
+
+  // ---- 条款校验：未勾选时提示并抖动，返回 false 阻止后续动作 ----
+  function requireLegal() {
+    if (legalAgreed) return true;
+    showErr('请先阅读并同意《用户协议》与《隐私政策》');
+    var row = document.getElementById('afLegalRow');
+    if (row) {
+      row.classList.remove('shake');
+      void row.offsetWidth; // 强制重排，让动画能重复触发
+      row.classList.add('shake');
+      var cb = document.getElementById('afLegal');
+      if (cb) cb.focus();
+    }
+    return false;
+  }
+
+  // 勾选框状态回写到变量（render 之后才存在，用事件委托）
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'afLegal') {
+      legalAgreed = !!e.target.checked;
+      if (legalAgreed) showErr('', true);
+    }
+  });
 
   // ---- 统一错误/提示显示（供 handleSendCode 与 handleSubmit 共用） ----
   function showErr(msg, clear) {
@@ -285,6 +329,11 @@
         (isReg ? '<div class="field"><label>确认密码</label><input class="input" type="password" id="afPass2" placeholder="再次输入密码" autocomplete="new-password" /></div>' : '') +
         '<div class="err" id="afErr"></div>' +
         '<label class="remember"><input type="checkbox" id="afRemember" checked /><span>自动登录（30 天内免登录）</span></label>' +
+        '<label class="legal-row" id="afLegalRow">' +
+          '<input type="checkbox" id="afLegal"' + (legalAgreed ? ' checked' : '') + ' />' +
+          '<span>我已阅读并同意 <a href="../terms/" target="_blank" rel="noopener">《用户协议》</a>' +
+          '与 <a href="../privacy/" target="_blank" rel="noopener">《隐私政策》</a></span>' +
+        '</label>' +
         '<button class="submit" type="submit" id="afSubmit">' + (isReg ? '注册并登录' : '登录') + '</button>' +
         '<div class="divider"><span>或</span></div>' +
         '<button type="button" class="github-btn" id="afGitHub">' +
@@ -297,6 +346,7 @@
 
     document.getElementById('afSwitch').onclick = function () { switchTab(tab === 'login' ? 'register' : 'login'); };
     document.getElementById('afGitHub').onclick = function () {
+      if (!requireLegal()) return;
       // 内联构造 GitHub 授权 URL，确保 redirect_uri 与 GitHub OAuth App 注册的完全一致
       var state = (crypto&&crypto.getRandomValues)
         ? Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b){return b.toString(16).padStart(2,'0')}).join('')
@@ -407,6 +457,7 @@
   function handleSubmit(e) {
     e.preventDefault();
     if (busy || !window.AuthWeb) return;
+    if (!requireLegal()) return;
     var user = (document.getElementById('afUser').value || '').trim();
     var pass = document.getElementById('afPass').value;
     var remember = document.getElementById('afRemember').checked;

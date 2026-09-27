@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<script>try{var t=localStorage.getItem('see-theme');if(!t)t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<title>用户协议 — Scratch 扩展编辑器</title>
+<style>
+  :root {
+    --bg: #070711; --bg-2: #0c0c1a;
+    --ink: #eef0fb; --ink-dim: #a6a8c4; --ink-faint: #6c6f93;
+    --glass: rgba(255,255,255,0.045); --glass-brd: rgba(255,255,255,0.10);
+    --grad: linear-gradient(115deg, #8b5cf6 0%, #22d3ee 48%, #f472b6 100%);
+    --shadow: 0 24px 70px -28px rgba(0,0,0,0.85);
+    --r-lg: 22px; --font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  }
+  [data-theme="light"] {
+    --bg: #f4f5fb; --bg-2: #ffffff;
+    --ink: #1a1c2e; --ink-dim: #4a4d6b; --ink-faint: #8a8da8;
+    --glass: rgba(0,0,0,0.035); --glass-brd: rgba(0,0,0,0.08);
+    --shadow: 0 24px 70px -28px rgba(30, 30, 80, 0.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; background: var(--bg); color: var(--ink);
+    font-family: var(--font); padding: 32px 20px 64px; line-height: 1.8;
+  }
+  .bg-fx {
+    position: fixed; inset: 0; z-index: -1; overflow: hidden;
+    background:
+      radial-gradient(45% 42% at 14% 18%, rgba(139,92,246,.15), transparent 60%),
+      radial-gradient(40% 38% at 84% 22%, rgba(34,211,238,.12), transparent 60%),
+      radial-gradient(48% 46% at 72% 82%, rgba(244,114,182,.10), transparent 62%);
+  }
+  .wrap { width: 760px; max-width: 100%; margin: 0 auto; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; gap: 12px; flex-wrap: wrap;
+  }
+  .top a {
+    text-decoration: none; color: var(--ink-dim); font-size: 13px;
+    transition: color .15s;
+  }
+  .top a:hover { color: var(--ink); }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--glass-brd);
+    border-radius: var(--r-lg); box-shadow: var(--shadow), 0 0 80px rgba(139,92,246,.10);
+    padding: 34px 38px 40px;
+  }
+  h1 {
+    font-size: 25px; font-weight: 800; letter-spacing: -.02em;
+    margin-bottom: 6px;
+  }
+  .updated { font-size: 13px; color: var(--ink-faint); margin-bottom: 22px; }
+  .intro {
+    font-size: 14.5px; color: var(--ink-dim);
+    background: var(--glass); border-left: 3px solid #8b5cf6;
+    border-radius: 0 10px 10px 0; padding: 14px 18px; margin-bottom: 26px;
+  }
+  .sec { margin-bottom: 24px; }
+  .sec h2 {
+    font-size: 16px; font-weight: 700; margin-bottom: 8px;
+    background: var(--grad); -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: #8b5cf6;
+  }
+  .sec p { font-size: 14px; color: var(--ink-dim); margin-bottom: 8px; }
+  .sec p:last-child { margin-bottom: 0; }
+  .foot {
+    margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--glass-brd);
+    font-size: 13px; color: var(--ink-faint); display: flex; gap: 16px; flex-wrap: wrap;
+  }
+  .foot a { color: #8b5cf6; text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+  <div class="top">
+    <a href="../login/">&larr; 返回登录</a>
+    <a href="../index.html">首页</a>
+  </div>
+
+  <div class="card">
+    <h1>用户协议</h1>
+    <div class="updated">更新日期：2026-09-27</div>
+
+    <p class="intro">欢迎使用 Scratch 扩展编辑器。本协议是你与本服务之间就使用本服务所订立的约定。请在使用前完整阅读；你开始使用（包括通过 GitHub 登录）即表示你已接受本协议全部条款。</p>
+
+    <div class="sec">
+      <h2>一、服务说明</h2>
+      <p>本服务提供一个可视化的 Scratch / TurboWarp 自定义扩展编辑器：你可以在浏览器中拖拽积木、编写积木实现、实时预览生成的 JavaScript 代码，并导出为可直接加载的扩展文件。</p>
+      <p>本服务按「现状」免费提供，可能随时增加、调整或下线部分功能。我们不承诺服务永不中断或绝对无错误。</p>
+    </div>
+
+    <div class="sec">
+      <h2>二、账号与登录</h2>
+      <p>本服务仅支持通过 GitHub 账号登录。登录采用 GitHub Device Flow：你需要在 GitHub 页面上确认一组用户码，本服务全程接触不到你的 GitHub 密码，也不会获取你的仓库读写权限。</p>
+      <p>我们仅获取你在 GitHub 上公开的用户 ID、用户名、昵称、头像，以及用于识别账号的主邮箱地址。</p>
+      <p>你需要妥善保管自己的 GitHub 账号。因账号被他人使用而产生的操作，视为你本人的操作。</p>
+    </div>
+
+    <div class="sec">
+      <h2>三、你创作的内容</h2>
+      <p>你在编辑器中制作的扩展、积木定义、代码与项目配置，其权利归你所有，我们不会主张任何所有权。</p>
+      <p>只有当你主动使用「存档」「同步」等功能时，相关内容才会被上传保存；不使用这些功能时，你的作品仅存放在你自己的浏览器中。</p>
+      <p>你需对自己创作和分享的内容负责，确保其不侵犯他人的著作权、商标权或其他权利。</p>
+    </div>
+
+    <div class="sec">
+      <h2>四、使用规范</h2>
+      <p>你同意不利用本服务从事下列行为：</p>
+      <p>· 上传、生成或传播违反法律法规、含有恶意代码、用于窃取他人数据的内容；</p>
+      <p>· 通过自动化手段大量注册账号、刷取资源，或干扰、破坏服务的正常运行；</p>
+      <p>· 逆向破解、绕过服务的安全机制，或未经许可抓取、批量复制服务的数据；</p>
+      <p>· 冒充他人或虚构身份，误导其他用户。</p>
+    </div>
+
+    <div class="sec">
+      <h2>五、第三方服务</h2>
+      <p>本服务依赖若干第三方：GitHub 提供账号授权；Cloudflare 提供页面托管与数据存储；TurboWarp 等兼容编辑器用于运行你导出的扩展。</p>
+      <p>这些第三方有各自的服务条款与隐私政策，你使用它们时同时受其约束。我们无法控制第三方服务的中断、变更或数据处理行为。</p>
+      <p>你导出的扩展在第三方编辑器中运行所产生的一切后果，由你自行承担。</p>
+    </div>
+
+    <div class="sec">
+      <h2>六、免责与责任限制</h2>
+      <p>本服务不提供任何明示或默示的担保，包括但不限于适销性、特定用途适用性与不侵权的担保。</p>
+      <p>在法律允许的最大范围内，我们对因使用或无法使用本服务而产生的任何间接、附带、特殊或后果性损失不承担责任。</p>
+      <p>请自行备份重要作品。因浏览器数据被清除、设备损坏、账号异常等原因导致的作品丢失，我们不承担恢复义务。</p>
+    </div>
+
+    <div class="sec">
+      <h2>七、协议变更与终止</h2>
+      <p>我们可能不时修订本协议，修订后的版本公布并更新顶部日期后生效。若你在协议变更后继续使用本服务，视为你接受修订内容。</p>
+      <p>若你违反本协议，我们可暂停或终止向你提供服务。你也可以随时停止使用，并通过编辑器内的退出功能结束登录状态。</p>
+    </div>
+
+    <div class="sec">
+      <h2>八、其他</h2>
+      <p>本协议的订立、效力、解释与争议解决适用中华人民共和国法律。</p>
+      <p>若本协议任何条款被认定无效或不可执行，其余条款仍然有效。</p>
+      <p>对本协议有疑问，可通过项目仓库的 Issue 与我们联系。</p>
+    </div>
+
+    <div class="foot">
+      <a href="../privacy/">隐私政策</a>
+      <a href="../login/">返回登录</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

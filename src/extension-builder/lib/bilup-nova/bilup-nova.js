@@ -26,11 +26,51 @@ import PropTypes from 'prop-types';
 // 以字符串形式载入原版 bundle（raw-loader 内联，绕过 babel，避免被 scratch-gui 的 webpack 解析）
 import novaBundleSrc from '!!raw-loader!./novatheai.bundle.js';
 import novaMessages from './messages.js';
+import {initDeepseekWebPanel} from './dsw-vision-panel.js';
+import {patchNovaBundle, installExtEditorToolHost} from './nova-patch.js';
 
 // ---- lucide-react 垫片（原版经 n(5).a / n(1746).a 取用 lucide 图标）----
 // 宿主（scratch-gui）未安装 lucide-react，而原版把 lucide 图标作为外部模块（5=createLucideIcon 工厂、
 // 1746=某个已创建图标组件）由宿主运行时提供。lucide 图标本质是「带固定 attrs 的 <svg> + 子节点」，
 // 故用 React.createElement 精确还原其渲染结果，保证界面与原版像素级一致。
+// lucide 图标节点里的属性是 SVG 原始写法（stroke-width / stroke-linecap /
+// stroke-linejoin / class 等 kebab-case），直接展开给 React.createElement 会触发
+// 「Invalid DOM property」警告（React 16 要求驼峰式）。这里做一次归一化：
+// 已知别名走映射表，其余按 '-' 转驼峰，data-*/aria-* 保持原样。
+const SVG_ATTR_ALIAS = {
+    class: 'className',
+    for: 'htmlFor',
+    'stroke-width': 'strokeWidth',
+    'stroke-linecap': 'strokeLinecap',
+    'stroke-linejoin': 'strokeLinejoin',
+    'stroke-dasharray': 'strokeDasharray',
+    'stroke-dashoffset': 'strokeDashoffset',
+    'stroke-miterlimit': 'strokeMiterlimit',
+    'fill-rule': 'fillRule',
+    'clip-rule': 'clipRule',
+    'clip-path': 'clipPath',
+    'stop-color': 'stopColor',
+    'stop-opacity': 'stopOpacity',
+    'text-anchor': 'textAnchor',
+    'font-size': 'fontSize',
+    'font-weight': 'fontWeight',
+    'font-family': 'fontFamily',
+};
+function normalizeSvgAttrs(attrs) {
+    const out = {};
+    Object.keys(attrs || {}).forEach((k) => {
+        const v = attrs[k];
+        if (SVG_ATTR_ALIAS[k]) { out[SVG_ATTR_ALIAS[k]] = v; return; }
+        // data-* / aria-* 必须原样保留；其余 kebab-case 转驼峰
+        if (k.indexOf('-') > 0 && k.indexOf('data-') !== 0 && k.indexOf('aria-') !== 0) {
+            out[k.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = v;
+            return;
+        }
+        out[k] = v;
+    });
+    return out;
+}
+
 function createLucideIcon(iconName, iconNode) {
     const Icon = (props) => {
         const {
@@ -60,7 +100,7 @@ function createLucideIcon(iconName, iconNode) {
                 iconNode.map((node, i) => {
                     const tag = node[0];
                     const attrs = node[1] || {};
-                    return React.createElement(tag, { key: i, ...attrs });
+                    return React.createElement(tag, { key: i, ...normalizeSvgAttrs(attrs) });
                 }),
             children
         );
@@ -321,6 +361,17 @@ function createWindowManager() {
             x,
             y,
             setContent(node) {
+                // 关闭=隐藏、再次打开时原版会重新 setContent（并 render 到一个新 div）。
+                // 必须先把上一份内容节点卸载 + 移除，否则新旧两份 UI 同时挂在 body 里
+                // → 界面「变成 2 份」。卸载同时清掉旧树的副作用（全局监听等）。
+                if (contentNode && contentNode !== node) {
+                    try {
+                        ReactDOM.unmountComponentAtNode(contentNode);
+                    } catch (e) {
+                        /* ignore */
+                    }
+                    if (contentNode.parentNode === body) body.removeChild(contentNode);
+                }
                 contentNode = node;
                 if (node) {
                     node.style.width = '100%';
@@ -332,6 +383,8 @@ function createWindowManager() {
                 if (!root.parentNode) document.body.appendChild(root);
                 root.style.display = 'flex';
                 instance.isVisible = true;
+                instance.isMinimized = false;
+                instance.isHidden = false;
                 // 打开/显示时自动置顶（统一走 React 层级系统）
                 if (typeof window.__extBringToFront === 'function') window.__extBringToFront('nova');
                 return instance;
@@ -344,14 +397,16 @@ function createWindowManager() {
                 }
             },
             hide() {
+                // 同 _close：只隐藏。isVisible 保持 true，让原版打开逻辑走「复用 show()」分支，
+                // 避免重新 createWindow + render 造成第二份 UI。
                 root.style.display = 'none';
-                instance.isVisible = false;
+                instance.isHidden = true;
             },
             minimize() {
                 if (instance.isMinimized) return;
                 instance.isMinimized = true;
+                instance.isHidden = true;
                 root.style.display = 'none';
-                instance.isVisible = false;
             },
             toggleMaximize() {
                 if (instance.isMaximized) {
@@ -387,18 +442,13 @@ function createWindowManager() {
                 }
             },
             _close() {
-                if (onClose) {
-                    try {
-                        onClose();
-                    } catch (e) {
-                        console.error('[AI] onClose error', e);
-                    }
-                }
-                if (contentNode && contentNode.parentNode) {
-                    contentNode.parentNode.removeChild(contentNode);
-                }
-                if (root.parentNode) root.parentNode.removeChild(root);
-                instance.isVisible = false;
+                // 关闭 = 进入后台（隐藏），不销毁窗口/不卸载内容 → 聊天状态保留。
+                // 关键：isVisible 仍为 true，使原版 Cy() 的 `if (Ey && Ey.isVisible)` 守卫
+                // 走 Ey.show() 复用分支；若置 false，原版会重新 createWindow + 重新 render，
+                // 导致界面上出现两份 UI。
+                root.style.display = 'none';
+                instance.isMinimized = false;
+                instance.isHidden = true;
             },
         };
         closeBtn.addEventListener('click', () => instance._close());
@@ -665,12 +715,26 @@ export default {
         try {
             const { modules, req } = makeRuntime();
 
+            // 0) 运行时补丁：把原版的「Gandi IDE / Scratch 项目」语境改造成
+            //    「Scratch 扩展编辑器」语境（系统提示词 / 工具集 / 工具派发 / 配置同步）。
+            //    在 eval 之前做精确字符串替换，bundle 文件本身保持原样搬运。
+            //    同时安装扩展编辑器工具宿主：AI 调用的工具最终落到 __extEditorAI 上。
+            installExtEditorToolHost();
+            let bundleSrc = novaBundleSrc;
+            try {
+                const patched = patchNovaBundle(novaBundleSrc);
+                bundleSrc = patched.src;
+                console.log('[AI] nova bundle 补丁:\n' + patched.report.join('\n'));
+            } catch (e) {
+                console.error('[AI] nova bundle 补丁失败，回退原版:', e);
+            }
+
             // 1) 先把原版 bundle 放进我们自己的 webpack runtime（临时替换全局 webpackJsonpGUI）
             const savedGlobal = window.webpackJsonpGUI;
             window.webpackJsonpGUI = [];
             try {
                 // eslint-disable-next-line no-eval
-                (0, eval)(novaBundleSrc);
+                (0, eval)(bundleSrc);
             } catch (e) {
                 console.error('[AI] bundle eval error', e);
             }
@@ -715,8 +779,28 @@ export default {
             modules[1] = propTypesMod;        // prop-types（覆盖 bundle 内 strip-comments）
 
             // 浮动窗桥：原版经 n(97).default.createWindow 与 addon.createWindow 两路取用
+            // 单例复用（防止重新打开产生第 2 份）：
+            //   1) 同 title 已存在 → 直接复用（隐藏则 show）；不比对尺寸（每次打开尺寸可能不同）
+            //   2) 存在隐藏窗口（任何 title）→ 复用它
+            //   3) 都不满足（真正需要第二个窗口）→ 新建
             const wm = createWindowManager();
-            modules[97] = (m) => { m.exports = { default: wm }; };
+            const winPool = []; // {inst, key}
+            const wrappedCreateWindow = (opts) => {
+                const key = String((opts && opts.title) || '');
+                const same = winPool.find(x => x.key === key);
+                if (same) {
+                    // 复用：隐藏状态一律 show（isHidden 才是真实可见性开关；isVisible 保持
+                    // true 以便原版自身的 `if (Ey && Ey.isVisible)` 守卫也走复用分支）。
+                    same.inst.show();
+                    same.inst.bringToFront();
+                    return same.inst;
+                }
+                const inst = wm.createWindow(opts);
+                winPool.push({inst, key});
+                return inst;
+            };
+            const wmBridge = Object.assign({}, wm, {createWindow: wrappedCreateWindow});
+            modules[97] = (m) => { m.exports = {default: wmBridge}; };
 
             // css-loader 运行时（n(10) 列表收集 + 注入；n(12) 注入器在本环境为 no-op）
             modules[10] = makeCssRuntime();
@@ -774,7 +858,7 @@ export default {
             // 销毁控制器：cleanup 时置 disposed=true 阻止原版 userscript 的 for(;;) 重新挂载按钮，
             // 同时收集所有 waitForElement 创建的 MutationObserver 统一断开。
             const ctrl = { disposed: false, observers: [] };
-            const addon = buildAddonShim(wm, ctrl);
+            const addon = buildAddonShim(wmBridge, ctrl);
 
             // 诊断 + 降级：捕获 Nova 渲染崩溃（多为 react-markdown 路径的 "X is not a function"），
             // 向空白的浮动窗体注入「原生 DOM」降级提示（不经 React，避免二次崩溃），
@@ -819,16 +903,34 @@ export default {
                 .then(() => userscript({ addon, msg }))
                 .catch((e) => console.error('[AI] userscript 运行错误', e));
 
+            // DeepSeek 网页版（dsh-deepseek-web-vision）：**独立浮动窗**，
+            // 不再挂进 AI 设置面板的 sidebar。窗口自带最小化 / 最大化 / 关闭、
+            // 可拖动可拉伸，入口在编辑器顶部菜单栏右侧（.ext-menu-bar-right）。
+            // 内容是该插件的完整管理界面（登录态 / 账号库 / 模型 / 防风控 /
+            // 网络栈 / 上下文投喂 / 用量台账 / 手动 Token）。
+            // 所有数据都走同源代理 /deepseek-web-vision/api → DSH Web 端口。
+            // 放在这里只是因为 AI 插件的生命周期最合适：与 AI 面板同生共死，
+            // 两者在 UI 上没有任何耦合。
+            let disposeWebPanel = null;
+            try {
+                disposeWebPanel = initDeepseekWebPanel();
+            } catch (e) {
+                console.error('[AI] deepseek网页版设置面板初始化失败', e);
+            }
+
             return () => {
                 // 销毁控制器：先置 disposed=true，使原版 userscript 的 for(;;) 永久阻塞在
                 // await waitForElement，不再把按钮重新挂载回菜单栏（keep-alive 反制）。
                 ctrl.disposed = true;
+                if (disposeWebPanel) { try { disposeWebPanel(); } catch (e) { /* ignore */ } }
                 if (ctrl.observers) ctrl.observers.forEach((o) => { try { o.disconnect(); } catch (e) { /* ignore */ } });
                 // 清理：移除启动按钮（data-mw-item="nova"）与所有浮动窗（.sa-nova-wm-root）。
                 // 注意：不要匹配 .sa-nova —— 该 class 是 markAsSeen 标记在编辑器菜单元素上的，
                 // 误删会破坏顶部菜单栏。只精确移除 AI 自己的按钮与窗口即可。
                 const sel = '.sa-nova-wm-root, [data-mw-item="nova"]';
                 document.querySelectorAll(sel).forEach((el) => { el.remove(); });
+                // 卸载扩展编辑器工具宿主，避免残留闭包引用旧 React 状态
+                try { delete window.__extEditorAiToolHost; } catch (e) { window.__extEditorAiToolHost = null; }
                 const css = document.getElementById('bilup-nova-css');
                 if (css) css.remove();
             };

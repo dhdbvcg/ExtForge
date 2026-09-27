@@ -1,0 +1,9 @@
+{
+  "id": "deepseek-web-panel",
+  "name": "DeepSeek 网页版",
+  "description": "把 chat.deepseek.com 的网页模型接进编辑器：浏览器登录态捕获、账号库、PoW 求解、SSE 流式、图片理解。自带 Node 侧服务，无需 DSH。",
+  "category": "AI",
+  "version": "1.0.1",
+  "routes": ["/deepseek-web-vision/api"],
+  "author": "dhdbvcg"
+}

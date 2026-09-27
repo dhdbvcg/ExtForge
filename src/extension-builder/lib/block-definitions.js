@@ -1308,6 +1308,20 @@ export const BLOCK_DEFINITIONS = {
         id: 'REPORTER',
     },
 
+    // ---- 脚本 Script ----
+    // 工具箱「脚本」分类里引用了 script_eval，但 BLOCK_DEFINITIONS 里一直缺定义，
+    // 结果这个块在工具箱看得见、点得动，却无法被创建（Blockly.Blocks 里不存在）。
+    script_eval: {
+        type: 'script_eval',
+        message0: '执行代码 %1',
+        args0: [{type: 'field_input', name: 'CODE', text: 'return 1;'}],
+        colour: '#5A5A8F',
+        tooltip: '直接执行一段 JavaScript 代码',
+        id: 'COMMAND',
+        previousStatement: null,
+        nextStatement: null,
+    },
+
     // ---- 额外 Extra ----,
     extra_comment: {
         type: 'extra_comment',

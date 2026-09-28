@@ -19,6 +19,7 @@
 const { fork } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 /** 读文本并剥掉 UTF-8 BOM。
  *  Windows 上写文件很容易带 BOM（PowerShell 的 Set-Content、记事本「UTF-8」
@@ -52,6 +53,131 @@ function readVersion(dir) {
     } catch (e) {
         return '';
     }
+}
+
+/**
+ * 从 GitHub 拉一个目录下的全部文件。
+ *
+ * 为什么由 Node 侧拉而不是浏览器拉：
+ *   1. 浏览器直连 api.github.com 有 CORS 和 60 次/小时/IP 的限流；
+ *   2. Node 侧还能顺便处理重定向、gzip，代码更短；
+ *   3. 最关键的 —— 浏览器拉完还得把 418KB 的 vendor bundle base64 后
+ *      再 POST 回来，等于把同一份数据搬两遍。
+ *
+ * 实现走 Git Trees API 而不是递归 Contents API：后者每层目录一个请求，
+ * 深目录会打出十几个请求，且拿不到嵌套 vendor 的完整清单。
+ */
+async function fetchGithubDir(owner, repo, dir, log) {
+    // 归一化：'.' 与空串都表示「仓库根目录就是插件本体」。
+    // 市场清单里这类条目没法把 dir 当子目录用 —— dir 字段被占用来表示
+    // 「装到本机后用哪个目录名」，仓库内路径由单独的 path 字段给出。
+    let cleanDir = String(dir == null ? '' : dir).trim().replace(/^\/+|\/+$/g, '');
+    if (cleanDir === '.') cleanDir = '';
+
+    // 本机 Node 的根证书库常与企业代理 / 自签中间证书冲突，报
+    // `unable to verify the first certificate`（Node 26 还会建议 --use-system-ca）。
+    // 这里**先按严格校验请求**，只在确实撞上证书类错误时才降级重试一次，
+    // 并把降级这件事显式打进日志。
+    //
+    // 为什么不干脆一直 rejectUnauthorized:false：这条路径下载回来的是会被
+    // fork 执行的插件代码，静默放宽校验等于给中间人开门。开发机上的
+    // github-oauth 代理敢放宽，是因为它只转发两个公开 OAuth 端点、不传凭据、
+    // 响应也只回给本机页面；这里没有那个前提。
+    const isCertError = (e) => {
+        const code = String((e && e.code) || '');
+        const msg = String((e && e.message) || '');
+        return /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER/.test(code) ||
+            /unable to verify|self.signed|certificate/i.test(msg);
+    };
+
+    function get(url, redirects, relaxed) {
+        return new Promise((resolve, reject) => {
+            const req = https.get(url, {
+                headers: {
+                    'user-agent': 'scratch-extension-editor',
+                    accept: 'application/vnd.github+json'
+                },
+                rejectUnauthorized: !relaxed
+            }, (res) => {
+                const sc = res.statusCode || 0;
+                // GitHub 的 raw 域会 302 到 CDN，不跟就会拿到一个空 body
+                if (sc >= 300 && sc < 400 && res.headers.location && (redirects || 0) < 5) {
+                    res.resume();
+                    resolve(get(res.headers.location, (redirects || 0) + 1, relaxed));
+                    return;
+                }
+                if (sc !== 200) {
+                    res.resume();
+                    reject(new Error('HTTP ' + sc + ' ' + url));
+                    return;
+                }
+                const chunks = [];
+                res.on('data', c => chunks.push(c));
+                res.on('end', () => resolve(Buffer.concat(chunks)));
+            });
+            req.on('error', (e) => {
+                if (!relaxed && isCertError(e)) {
+                    if (log) log('[ext-plugins] TLS 证书链校验失败，已降级重试（' + (e.code || e.message) + '）');
+                    resolve(get(url, redirects, true));
+                    return;
+                }
+                reject(e);
+            });
+            req.setTimeout(60000, () => req.destroy(new Error('请求超时')));
+        });
+    }
+
+    // 默认分支名可能是 main 也可能是 master，两边都试
+    let tree = null;
+    let lastErr = null;
+    for (const ref of ['main', 'master']) {
+        try {
+            const buf = await get('https://api.github.com/repos/' + owner + '/' + repo + '/git/trees/' + ref + '?recursive=1', 0, false);
+            const data = JSON.parse(buf.toString('utf8'));
+            if (Array.isArray(data.tree)) { tree = data.tree; break; }
+        } catch (e) { lastErr = e; }
+    }
+    if (!tree) throw new Error('取仓库文件树失败：' + ((lastErr && lastErr.message) || '未知'));
+
+    /**
+     * 取一个文件的原始字节。
+     *
+     * 走 Contents API（base64）而**不是** raw.githubusercontent.com：
+     * 后者在本机当前网络下稳定返回 502（代理层拦的，不是 GitHub 的错），
+     * 而 api.github.com 已经验证可达。代价是响应体大 33%，但插件包一共
+     * 就几个文件、最大 418KB，这点开销远小于「根本装不上」。
+     *
+     * Contents API 对超过 1MB 的文件不返回 content，故对超大文件明确报错，
+     * 而不是静默写一个空文件进去。
+     */
+    async function fetchBlob(owner, repo, filePath) {
+        const url = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/' +
+            filePath.split('/').map(encodeURIComponent).join('/') + '?ref=HEAD';
+        const buf = await get(url, 0, false);
+        const data = JSON.parse(buf.toString('utf8'));
+        if (!data || typeof data.content !== 'string') {
+            if (data && data.size > 1048576) {
+                throw new Error('文件超过 1MB，Contents API 不返回内容：' + filePath + '（' + data.size + ' 字节）');
+            }
+            throw new Error('取文件内容失败：' + filePath);
+        }
+        return Buffer.from(data.content.replace(/\s/g, ''), 'base64');
+    }
+
+    const prefix = cleanDir ? cleanDir + '/' : '';
+    const blobs = tree.filter(t =>
+        t.type === 'blob' && t.path.indexOf(prefix) === 0 && (!cleanDir || t.path !== cleanDir)
+    );
+    if (!blobs.length) throw new Error('在 ' + owner + '/' + repo + '/' + cleanDir + ' 下没有找到文件');
+
+    const files = [];
+    for (const b of blobs) {
+        // 相对插件目录的路径：vendor/deepseek-web-host.mjs
+        const rel = b.path.slice(prefix.length);
+        if (!rel || rel.indexOf('..') >= 0) continue;
+        files.push({path: rel, content: await fetchBlob(owner, repo, b.path)});
+    }
+    return files;
 }
 
 module.exports = function createPluginRuntime(opts) {
@@ -294,6 +420,80 @@ module.exports = function createPluginRuntime(opts) {
         return {ok: false, error: (lastErr && lastErr.code) || String(lastErr && lastErr.message || lastErr)};
     }
 
+    /**
+     * 把一个插件的文件写进 pluginsDir/<dirName>。
+     *
+     * 覆盖前先把旧目录整个删掉，理由不是洁癖：升级时如果新版本**删掉了**
+     * 某个文件（比如换了 vendor 文件名），保留旧文件会让旧代码仍被加载，
+     * 表现为「明明更新了却还是老行为」，极难排查。
+     */
+    function writePluginFiles(dirName, files) {
+        const name = String(dirName || '').replace(/[\\/]+$/, '');
+        if (!name || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name === '.' || name === '..') {
+            throw new Error('非法的插件目录名：' + dirName);
+        }
+        const target = path.join(pluginsDir, name);
+        if (path.resolve(path.dirname(target)) !== path.resolve(pluginsDir)) {
+            throw new Error('目录不在插件目录内');
+        }
+
+        // 正在跑的实例会占着文件（Windows 上尤其明显），先停
+        for (const [pid, rec] of Array.from(running.entries())) {
+            if (pid === name || pid === (files.manifestId || name)) {
+                try { rec.proc.kill(); } catch (e) { /* ignore */ }
+                running.delete(pid);
+                rebuildRouteTable();
+            }
+        }
+
+        if (fs.existsSync(target)) {
+            fs.rmSync(target, {recursive: true, force: true, maxRetries: 3, retryDelay: 150});
+        }
+        fs.mkdirSync(target, {recursive: true});
+
+        for (const f of files) {
+            const rel = String(f.path || '').replace(/\\/g, '/');
+            // 再防一次目录穿越：文件路径来自远端仓库，不能无条件信任
+            if (!rel || rel.indexOf('..') >= 0 || rel.charAt(0) === '/') continue;
+            const dst = path.join(target, rel);
+            if (path.resolve(dst).indexOf(path.resolve(target)) !== 0) continue;
+            fs.mkdirSync(path.dirname(dst), {recursive: true});
+            const buf = Buffer.isBuffer(f.content) ? f.content : Buffer.from(String(f.content || ''), 'utf8');
+            fs.writeFileSync(dst, buf);
+        }
+        log('[ext-plugins] 已写入插件 ' + name + '（' + files.length + ' 个文件）');
+        return name;
+    }
+
+    /** 启动单个插件的 Node 服务（已在跑则跳过）。 */
+    function startById(id) {
+        const p = listPlugins().find(x => x.id === id || x.dir === id);
+        if (!p) return {ok: false, error: '插件不存在：' + id};
+        if (!p.hasServer) return {ok: false, error: '该插件没有 Node 侧服务'};
+        if (running.has(p.id)) return {ok: true, already: true, id: p.id};
+        startOne(p);
+        return {ok: true, id: p.id};
+    }
+
+    /**
+     * 从 GitHub 装一个带 Node 服务的插件（市场「安装」按钮的落点）。
+     *
+     * 这条路径和「浏览器侧插件」完全不同：那些只是 localStorage 里的一段
+     * 源码，这些是磁盘上的一个目录 + 一个会被 fork 的子进程。所以不走
+     * /ext-plugins/list 那套 eval 流程，而是拉文件 → 落盘 → 起服务。
+     */
+    async function installFromGithub(owner, repo, dir, dirName) {
+        try {
+            const files = await fetchGithubDir(owner, repo, dir, log);
+            // 目录名优先用调用方给的（市场清单里的 dir），否则用仓库侧目录名
+            const name = writePluginFiles(dirName || dir, files);
+            const started = startById(name);
+            return {ok: true, dir: name, files: files.length, started};
+        } catch (e) {
+            return {ok: false, error: String((e && e.message) || e)};
+        }
+    }
+
     /** 启动所有带 Node 侧服务的插件。可重复调用（已在跑的会跳过）。 */
     function start() {
         // 先把内置插件铺到用户目录，再扫描 —— 否则首次启动扫到的是空目录。
@@ -324,6 +524,9 @@ module.exports = function createPluginRuntime(opts) {
         bundledDir,
         listPlugins,
         removePlugin,
+        writePluginFiles,
+        startById,
+        installFromGithub,
         deployBundled,
         start,
         dispose,

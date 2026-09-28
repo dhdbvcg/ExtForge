@@ -286,6 +286,39 @@ const base = {
                 });
             });
 
+            // 从 GitHub 安装**外置插件**（市场「安装」按钮的落点）。
+            // 和 /ext-plugins/list 那条路不同：这里要落盘 + 起子进程，
+            // 所以必须由 Node 侧去拉文件，浏览器只发一个 owner/repo/dir。
+            app.post('/ext-plugins/install', (req, res) => {
+                let raw = '';
+                req.on('data', (c) => {
+                    raw += c;
+                    if (raw.length > 8192) req.destroy();
+                });
+                req.on('end', async () => {
+                    let body = {};
+                    try { body = JSON.parse(raw || '{}') || {}; } catch (e) { /* 下面统一报错 */ }
+                    const owner = String(body.owner || '').trim();
+                    const repo = String(body.repo || '').trim();
+                    // dir 允许为空 —— 空表示「仓库根目录就是插件本体」。
+                    // 早期版本把它当必填，导致住在独立仓库根目录的插件（如
+                    // scratch-deepseek-web-panel）永远装不上，报「缺少参数」，
+                    // 而请求里其实什么参数都不缺。
+                    const dir = String(body.dir == null ? '' : body.dir).trim();
+                    const dirName = String(body.dirName || dir).trim();
+                    if (!owner || !repo || !dirName) {
+                        res.status(400).json({ok: false, error: '缺少 owner / repo / dirName 参数'});
+                        return;
+                    }
+                    try {
+                        const out = await pluginRuntime.installFromGithub(owner, repo, dir, dirName);
+                        res.status(out.ok ? 200 : 400).json(out);
+                    } catch (e) {
+                        res.status(500).json({ok: false, error: String((e && e.message) || e)});
+                    }
+                });
+            });
+
             // 启动所有带 Node 侧服务的插件（它们各自 fork 成子进程）。
             pluginRuntime.start();
 

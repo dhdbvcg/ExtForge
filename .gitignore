@@ -39,10 +39,12 @@ npm-*
 !/build/main.js
 !/build/package.json
 !/build/installer.nsh
-# 插件运行时与内置插件：build/ 里手写的源（不是 electron-builder 的产物），
+# 插件运行时：build/ 里手写的源（不是 electron-builder 的产物），
 # 打包时必须一起带上，否则 exe 起来后 require('./ext-plugin-runtime') 直接失败。
+#
+# 这里**没有** build/plugins-src —— 内置插件已全部外置，插件本体住在各自的
+# GitHub 仓库，由用户从「设置 → 插件市场」安装，不再随编辑器分发。
 !/build/ext-plugin-runtime.js
-!/build/plugins-src/
 
 # ── 开源发布前的保密/大文件规则 ──
 

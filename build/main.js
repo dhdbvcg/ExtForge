@@ -100,6 +100,39 @@ function createServer() {
         return;
       }
 
+      // 从 GitHub 安装**外置插件**（市场「安装」按钮的落点）。
+      // 与 /ext-plugins/list 不同：这里要落盘 + 起子进程，必须由 Node 侧拉文件。
+      if (urlPath === '/ext-plugins/install' && req.method === 'POST') {
+        let raw = '';
+        req.on('data', (c) => {
+          raw += c;
+          if (raw.length > 8192) req.destroy();
+        });
+        req.on('end', async () => {
+          let body = {};
+          try { body = JSON.parse(raw || '{}') || {}; } catch (e) { /* 下面统一报错 */ }
+          const owner = String(body.owner || '').trim();
+          const repo = String(body.repo || '').trim();
+          // dir 允许为空 —— 空表示「仓库根目录就是插件本体」，见 webpack.config.js 同名端点。
+          const dir = String(body.dir == null ? '' : body.dir).trim();
+          const dirName = String(body.dirName || dir).trim();
+          if (!owner || !repo || !dirName) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ ok: false, error: '缺少 owner / repo / dirName 参数' }));
+            return;
+          }
+          let out;
+          try {
+            out = await pluginRuntime.installFromGithub(owner, repo, dir, dirName);
+          } catch (e) {
+            out = { ok: false, error: String((e && e.message) || e) };
+          }
+          res.writeHead(out.ok ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(out));
+        });
+        return;
+      }
+
       // 路由表里的前缀是插件自报的完整路径（如 /deepseek-web-vision/api），
       // 命中就整段透传，插件子进程自己解析剩余部分。
       const pluginPort = pluginRuntime.portFor(urlPath);

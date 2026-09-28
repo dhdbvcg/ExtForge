@@ -200,6 +200,14 @@ function evalAddonText(rawCode) {
             category: a.category || '自定义',
             css: typeof a.css === 'string' ? a.css : '',
             setupCode: a.setup.toString(),
+            // 同时保留原函数对象。
+            //
+            // 这不是冗余：setupCode 是为了持久化（localStorage 只能存字符串），
+            // 而 rehydrateSetup 用 new Function 重建出来的函数**没有闭包** ——
+            // 插件源码里定义在 setup 外面的辅助函数、常量全部丢失，一调用就
+            // ReferenceError。目录插件（plugins/<id>/index.js）是当场 eval 的，
+            // 不需要序列化，直接用这个原函数就能保住闭包。
+            setup: a.setup,
             custom: true
         });
     }
@@ -793,11 +801,33 @@ export async function fetchAddonMarketFromTopic(topic) {
         const name = (typeof p === 'string' ? p : (p.name || dir));
         const description = (typeof p === 'string' ? '' : (p.description || ''));
         const category = (typeof p === 'string' ? '插件' : (p.category || '插件'));
+        // 条目级仓库覆盖：市场清单托管在一个仓库，但插件本体可以住在别的仓库。
+        // 值形如 'owner/repo'；缺省则用市场仓库自身。
+        // 没有这个字段，带 Node 服务的插件就只能连源码一起塞进市场仓库，
+        // 那份 vendor bundle 会有两份、各自漂移。
+        let repoOwner = MARKET_OWNER;
+        let repoName = MARKET_REPO;
+        const repoOverride = (typeof p === 'string' ? '' : (p.repo || ''));
+        if (repoOverride && repoOverride.indexOf('/') > 0) {
+            const parts = repoOverride.split('/');
+            repoOwner = parts[0];
+            repoName = parts[1];
+        }
+        // hasServer：清单显式声明，或条目自带 repo（住在独立仓库的多半是带服务的）
+        const hasServer = typeof p === 'string' ? false : !!p.server;
+        // 仓库内路径（subdir）与安装目录名（dir）是两件事，必须分开：
+        //   - dir      → 装到 %APPDATA%/…/plugins/<dir>/，也是市场卡片的键；
+        //   - subdir   → 该插件在仓库里的子目录，'' 表示仓库根就是插件本体。
+        // 用 dir 去仓库里找文件只在「市场仓库自己托管插件」时成立；一旦插件
+        // 住在独立仓库（如 scratch-deepseek-web-panel 的根目录），就会找错地方。
+        const subdir = typeof p === 'string' ? dir : (p.path === undefined || p.path === null ? dir : String(p.path));
         return {
             id: dir, name, description, category, dir,
-            source: 'github:' + MARKET_OWNER + '/' + MARKET_REPO + '/' + dir,
-            repoOwner: MARKET_OWNER,
-            repoName: MARKET_REPO
+            hasServer,
+            subdir,
+            source: 'github:' + repoOwner + '/' + repoName + '/' + (subdir || dir),
+            repoOwner,
+            repoName
         };
     });
 }
@@ -843,6 +873,33 @@ export async function removeDirPlugin(dirName) {
     }
 }
 
+
+/**
+ * 从 GitHub 仓库的某个目录安装**带 Node 服务的插件**（外置插件）。
+ *
+ * 和 importAddonFromGithubDir 是两条完全不同的路，别混：
+ *   - importAddonFromGithubDir：拉一个 index.js，eval 成插件对象存进
+ *     localStorage。纯浏览器侧，不落盘、不起进程，删了就没了。
+ *   - 本函数：把整个目录（含 server.mjs、vendor/ 等）拉到
+ *     %APPDATA%/scratch-extension-editor/plugins/<dir>/，再由 Node 侧
+ *     fork 成子进程。这才能承载「需要真正 Node 能力」的插件。
+ *
+ * 之所以由 Node 侧去拉而不是浏览器拉完再上传：vendor bundle 常有几百 KB，
+ * 浏览器拉完 base64 再 POST 回来等于搬两遍，还多受一道 CORS 与限流。
+ */
+export async function installDirPluginFromGithub(owner, repo, dir, dirName) {
+    const res = await fetch('/ext-plugins/install', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({owner, repo, dir, dirName: dirName || dir})
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* 下面按状态码报错 */ }
+    if (!res.ok || !data.ok) {
+        throw new Error((data && (data.error || data.message)) || ('HTTP ' + res.status));
+    }
+    return data;
+}
 
 /**
  * 「编辑器数据文件夹」里安装的插件（终端安装的落点）。
@@ -895,6 +952,8 @@ export async function loadDirPlugins() {
                 const list = evalAddonText(it.code);
                 for (const a of list) {
                     out.push(Object.assign({}, a, {
+                        // 保住 eval 时那份带闭包的 setup（见 evalAddonText 里的说明）
+                        setup: a.setup,
                         dirPlugin: true,
                         dirName: it.dir,
                         dirVersion: it.version || '',

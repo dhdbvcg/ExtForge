@@ -26,7 +26,10 @@ import PropTypes from 'prop-types';
 // 以字符串形式载入原版 bundle（raw-loader 内联，绕过 babel，避免被 scratch-gui 的 webpack 解析）
 import novaBundleSrc from '!!raw-loader!./novatheai.bundle.js';
 import novaMessages from './messages.js';
-import {initDeepseekWebPanel} from './dsw-vision-panel.js';
+// DeepSeek 网页版面板已外置为编辑器插件（plugins-src/deepseek-web-panel）。
+// 它的界面注入、登录态、账号库全由插件自己管，与 AI 面板彻底解耦。
+// 这里不再 import dsw-vision-panel.js —— 那份代码已经搬进插件，
+// 留在源码里只会变成两份互相漂移的副本。
 import {patchNovaBundle, installExtEditorToolHost} from './nova-patch.js';
 
 // ---- lucide-react 垫片（原版经 n(5).a / n(1746).a 取用 lucide 图标）----
@@ -903,26 +906,17 @@ export default {
                 .then(() => userscript({ addon, msg }))
                 .catch((e) => console.error('[AI] userscript 运行错误', e));
 
-            // DeepSeek 网页版（dsh-deepseek-web-vision）：**独立浮动窗**，
-            // 不再挂进 AI 设置面板的 sidebar。窗口自带最小化 / 最大化 / 关闭、
-            // 可拖动可拉伸，入口在编辑器顶部菜单栏右侧（.ext-menu-bar-right）。
-            // 内容是该插件的完整管理界面（登录态 / 账号库 / 模型 / 防风控 /
-            // 网络栈 / 上下文投喂 / 用量台账 / 手动 Token）。
-            // 所有数据都走同源代理 /deepseek-web-vision/api → DSH Web 端口。
-            // 放在这里只是因为 AI 插件的生命周期最合适：与 AI 面板同生共死，
-            // 两者在 UI 上没有任何耦合。
-            let disposeWebPanel = null;
-            try {
-                disposeWebPanel = initDeepseekWebPanel();
-            } catch (e) {
-                console.error('[AI] deepseek网页版设置面板初始化失败', e);
-            }
-
+            // DeepSeek 网页版面板不在这里初始化。
+            //
+            // 它已经从「AI 插件内部的一块 UI」提升为**独立的编辑器插件**：
+            // 装在 plugins/deepseek-web-panel/，由 ext-addons 的目录插件机制
+            // 激活，界面自己注入到设置面板左侧。这样两件事各自独立 ——
+            //   - 关掉 AI 助手不会连带 DeepSeek 面板一起消失；
+            //   - 不装 AI 助手也能单独装 DeepSeek 面板。
             return () => {
                 // 销毁控制器：先置 disposed=true，使原版 userscript 的 for(;;) 永久阻塞在
                 // await waitForElement，不再把按钮重新挂载回菜单栏（keep-alive 反制）。
                 ctrl.disposed = true;
-                if (disposeWebPanel) { try { disposeWebPanel(); } catch (e) { /* ignore */ } }
                 if (ctrl.observers) ctrl.observers.forEach((o) => { try { o.disconnect(); } catch (e) { /* ignore */ } });
                 // 清理：移除启动按钮（data-mw-item="nova"）与所有浮动窗（.sa-nova-wm-root）。
                 // 注意：不要匹配 .sa-nova —— 该 class 是 markAsSeen 标记在编辑器菜单元素上的，

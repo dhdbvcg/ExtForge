@@ -27,7 +27,7 @@ import {buildSyncUrl, parseSyncPayload, importSyncPayload} from '../lib/sync.js'
 import {
     cloudAvailable, cloudSearchUsers, cloudListRelations, cloudFollow, cloudUnfollow
 } from '../lib/cloud.js';
-import {EXT_ADDONS, getAllAddons, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, removeDirPlugin, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, loadDirPlugins, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
+import {EXT_ADDONS, getAllAddons, getDirPlugins, getAddonState, setAddonState, applyExtAddons, getAddonOptions, setAddonOptions, removeCustomAddon, removeDirPlugin, installDirPluginFromGithub, importAddonFromSource, updateCustomAddonSource, importAddonFromGithubDir, fetchAddonMarketFromTopic, loadCustomAddons, loadDirPlugins, importAddonBundle, importAddonFromZip} from '../lib/ext-addons.js';
 import {installVoiceInput} from '../lib/voice-input.js';
 import {openAskBar} from '../lib/ai-ask-bar.js';
 import {LEGAL_DOCS} from '../lib/legal-docs.js';
@@ -4112,10 +4112,19 @@ const ExtensionBuilderInner = () => {
                 return;
             }
             setMarketList(list);
-            // 标记已安装（按 source 匹配已装自定义插件）
+            // 标记已安装。两条来源都要看：
+            //   - 浏览器侧插件：存在 localStorage 里，按 source 匹配；
+            //   - 带 Node 服务的插件：是磁盘上的目录，按**目录名**匹配。
+            // 只看前者的话，装好的 deepseek-web-panel 在市场里仍显示「安装」，
+            // 用户点第二次才会发现没必要。
             const installed = {};
             const customSources = loadCustomAddons().map(a => (a.source || '').replace(/\/$/, ''));
+            const dirNames = getDirPlugins().map(a => a.dirName || a.id);
             list.forEach(p => {
+                if (p.hasServer) {
+                    if (dirNames.indexOf(p.dir) >= 0) installed[p.dir] = true;
+                    return;
+                }
                 if (customSources.indexOf(p.source.replace(/\/$/, '')) >= 0) installed[p.dir] = true;
             });
             setMarketInstalled(installed);
@@ -4126,12 +4135,39 @@ const ExtensionBuilderInner = () => {
         }
     }, [marketLoading]);
 
-    // 从市场安装单个插件（source 已含 owner/repo/dir，动态解析）
+    /**
+     * 从市场安装单个插件。
+     *
+     * 市场里有两种插件，安装路径完全不同，靠 item.hasServer 分流：
+     *   - 浏览器侧插件：拉一个 index.js，eval 成插件对象存进 localStorage；
+     *   - 带 Node 服务的插件（hasServer）：整个目录拉到
+     *     %APPDATA%/scratch-extension-editor/plugins/，再由 Node 侧 fork 成
+     *     子进程。这类插件没法只靠浏览器侧代码工作，必须落盘。
+     * 走错路径的表现是「装完提示成功，但功能没出现」，很难从现象反推，
+     * 所以这里显式分流而不是让后端去猜。
+     */
     const handleMarketInstall = useCallback(async (item) => {
         setMarketInstalling(item.dir);
         try {
             const m = /^github:([^/]+)\/([^/]+)\/(.+)$/.exec(item.source || '');
             if (!m) throw new Error('插件来源格式不正确：' + (item.source || ''));
+            // 仓库内子目录与安装目录名不是一回事，见 fetchAddonMarketFromTopic 的说明。
+            const subdir = item.subdir === undefined || item.subdir === null ? m[3] : item.subdir;
+            if (item.hasServer) {
+                await installDirPluginFromGithub(m[1], m[2], subdir, item.dir);
+                // 磁盘上多了一个目录，但页面侧的 _dirPlugins 还是旧快照。
+                // 不重扫的话列表里看不到它，用户会以为没装上。
+                await loadDirPlugins().catch(() => []);
+                setAddonListVersion(v => v + 1);
+                const nextState = {...addonState};
+                nextState[item.dir] = true;
+                setAddonState(nextState);
+                setAddonStateInternal(nextState);
+                reapplyAddons();
+                setMarketInstalled(prev => ({...prev, [item.dir]: true}));
+                alert('已安装插件：' + item.name + '\n\n它的 Node 服务已启动。若界面没立刻出现，重开一次编辑器即可。');
+                return;
+            }
             const imported = await importAddonFromGithubDir(m[1], m[2], m[3]);
             // 安装后默认启用（与 _activateImported 一致）
             const nextState = {...addonState};
@@ -5878,6 +5914,9 @@ const ExtensionBuilderInner = () => {
                                                     <div className="ext-market-card-cat">{item.category}</div>
                                                     <div className="ext-market-card-repo">{item.repoOwner}/{item.repoName}</div>
                                                     <div className="ext-market-card-desc">{item.description}</div>
+                                                    {item.hasServer && (
+                                                        <div className="ext-market-card-cat" title="安装后会在本机插件目录落盘，并拉起一个只监听 127.0.0.1 的 Node 服务">含本地服务</div>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         className={`ext-market-install-btn ${marketInstalled[item.dir] ? 'installed' : ''}`}

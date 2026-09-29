@@ -1,13 +1,16 @@
 {
-  "name": "scratch-gui",
-  "version": "3.2.37",
-  "description": "Graphical User Interface for creating and running Scratch 3.0 projects",
-  "author": "Massachusetts Institute of Technology",
+  "name": "scratch-extension-editor",
+  "version": "0.2.13671891",
+  "description": "可视化 Scratch 扩展编辑器 —— 像做 Scratch 项目一样做 Scratch 扩展",
+  "author": "dhdbvcg",
   "license": "GPL-3.0",
-  "homepage": "https://github.com/LLK/scratch-gui#readme",
+  "homepage": "https://github.com/dhdbvcg/scratch-extension-editor#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LLK/scratch-gui.git"
+    "url": "https://github.com/dhdbvcg/scratch-extension-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dhdbvcg/scratch-extension-editor/issues"
   },
   "main": "./build/js/editor.js",
   "scripts": {

@@ -1,75 +1,146 @@
-# Scratch 扩展编辑器 (scratch-extension-editor)
+# Scratch 扩展编辑器
 
-基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui) 深度定制的 **Scratch 扩展编辑器**，内置完整的扩展构建器（ExtensionBuilder），支持图形化积木编辑、JS 扩展导入导出、自定义插件、账号与云存档、跨站同步等功能。
+**像做 Scratch 项目一样做 Scratch 扩展。**
 
-## ✨ 功能特性
+基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui) 深度定制的可视化扩展编辑器。在图形界面里拼积木、写代码、一键导出能在 TurboWarp 跑的扩展 —— 不需要打开编辑器源码，也不需要懂 webpack。
 
-- **积木扩展编辑器（ExtensionBuilder）**：图形化创建自定义积木（帽子 / C 形 / 布尔 / 命令 / 报告器），类别颜色与形状和官方 Scratch 3.0 / TurboWarp 完全一致
-- **JS 文件导入 / 导出**：一键生成可在 TurboWarp 加载的扩展 JS 文件
-- **自定义插件系统**：导入本地 `.js` 文件作为编辑器插件，立即生效、可随时开关
-- **开发教程页面**：`static/ext-addons-doc.html`，插件开发与使用完整文档（编辑器内「开发教程」按钮直达）
-- **账号系统**：注册 / 登录 / 登出，密码 SHA-256 + 盐加密
-- **云存档**：按账号分区存储项目（可接 Supabase 云端同步）
-- **跨站互通**：`#sync=` 同步链接，在任意部署之间转移账号与存档
-- **本地化**：中文界面，积木与代码区采用官方 LLK/scratch-l10n 中文翻译
+[官网](https://scratchextensioneditor.cc.cd) · [插件市场](https://github.com/dhdbvcg/scratch-ext-addon) · [问题反馈](https://github.com/dhdbvcg/scratch-extension-editor/issues)
 
-## 🚀 快速开始
+---
+
+## 它是什么
+
+写一个 Scratch 扩展，传统上意味着：克隆 TurboWarp 的扩展仓库 → 找到 `extension-manager` → 照着已有扩展抄一份 `getInfo()` → 处理积木颜色、参数类型、`Blockly` 定义 → 装依赖 → 打包 → 在编辑器里手动加载调试。改一次积木名字，这一圈要重走一遍。
+
+这个项目把这一圈压成一个界面：
+
+- **左侧**：积木清单，点「+」加一个积木，选类型（命令 / 报告器 / 布尔 / 帽子 / C 形）
+- **中间**：Blockly 工作区，每个积木的参数直接可视化编辑，外观与官方 Scratch 3.0 / TurboWarp 像素级一致
+- **右侧**：实时生成的扩展 JS 源码，可以手动改，改完能反同步回积木
+- **调试器**：把源码编码成 Data URI，一键在 TurboWarp / RemixWarp 里打开并加载
+
+---
+
+## 功能
+
+### 扩展构建器
+
+- 五种积木形态：命令、报告器、布尔、帽子、C 形
+- 积木类别、颜色、参数类型与官方规范一致（颜色统一走 `#RRGGBB` + `resolveBlockColour`）
+- 参数支持文本、数字、布尔、下拉菜单、颜色、角度、矩阵、音符等
+- 生成的代码带完整的 `getInfo()` / `blocks` / 参数定义，可直接被 TurboWarp 加载
+- JS 文件导入 / 导出，方便手写与图形化混合编辑
+
+### 调试器：Data URI 直载
+
+调试器不跑本地服务器，也不需要把你的扩展传到公网。它把源码做 base64 后拼进在线编辑器的 `?extension=` 参数：
+
+```
+https://turbowarp.org/editor?extension=data:text/javascript;base64,<...>
+```
+
+这条路和 [CB-ExtGallary](https://github.com/chessbrain/CB-ExtGallary) 用的是同一个机制，好处是**不需要公网直链、不经过任何中间服务器**。
+
+两个实现细节值得说明：
+
+- **用 base64 而不是 `encodeURIComponent`。** 中文积木名在 UTF-8 下每字 4 字节，`%XX` 转义会膨胀成 9 字节。实测 7.8 KB 源码 base64 后 4.1 KB，而百分号编码要 10 KB 以上。
+- **`minifyForUrl()` 只删整行注释、空行和行首缩进。** 行内注释不敢动 —— 一句 `http://` 就会误伤。模板字符串按反引号配对跳过。压缩后还要过一遍 `new Function()` 语法自检，解析失败就退回原文，宁可链接长一点也不给你一个打不开的页面。
+
+链接过长时 TurboWarp 会返回 520，所以调试器同时保留「下载 .js」作为手动加载的退路。
+
+### 插件系统
+
+编辑器本身可以被插件扩展。插件**不随编辑器分发**，本体住在各自的 GitHub 仓库，用户在「设置 → 插件市场」里安装。
+
+插件分两类：
+
+| 类型 | 组成 | 能力 |
+|---|---|---|
+| 页面插件 | `index.js` | 往界面注入按钮、面板、样式 |
+| Node 插件 | `server.mjs` + `plugin.json` | 起本地服务，提供 API、接模型、读写文件 |
+
+带 `server.mjs` 的插件会被 fork 成独立子进程，用 IPC 报回自己的端口和路由前缀，编辑器据此建路由表并反向代理。页面里 `fetch('/你的前缀/...')` 就能同源访问，不用处理 CORS。
+
+端口由操作系统分配（传 `0`），所以开多个编辑器实例不会撞端口。
+
+已上架的例子：**[DeepSeek 网页版](https://github.com/dhdbvcg/scratch-deepseek-web-panel)** —— 把 chat.deepseek.com 的网页模型接进编辑器，含登录态捕获、账号库、PoW 求解、SSE 流式与图片理解。
+
+自己写插件的完整说明见 [CONTRIBUTING.md](CONTRIBUTING.md#写一个插件)。
+
+### AI 助手与实时协作
+
+- AI 助手面板，可接入多种模型
+- 语音输入：浏览器录音 → 本机解码，音频不出机器（见下）
+- 实时协作：多人同时编辑
+
+### 账号与存档
+
+- 注册 / 登录 / 登出，密码 SHA-256 + 盐
+- 按账号分区存储项目，可接 Supabase 云端同步
+- `#sync=` 同步链接，在任意部署之间转移账号与存档
+- GitHub OAuth 登录（PKCE，纯前端流程，不需要 client_secret）
+
+### 桌面端
+
+除网页版外提供 Windows 桌面版（Electron），打包配置在 `build/`。桌面版与网页版行为一致 —— 同一套插件运行时，同一个 `/ext-plugins/list` 接口，同一条反向代理路径。
 
 ```bash
-# 安装依赖（如已安装可跳过）
+cd build
+npm install
+npm start              # 起开发版
+npm run build          # 出 NSIS 安装包
+```
+
+---
+
+## 快速开始
+
+```bash
+# 需要 Node.js 22.x（见 .nvmrc）
+git clone https://github.com/dhdbvcg/scratch-extension-editor.git
+cd scratch-extension-editor
 npm install
 
-# 启动开发服务器（默认端口 8601）
 npm start
-# 打开 http://localhost:8601/editor.html
+# 打开 http://localhost:8601/
 ```
 
 生产构建：
 
 ```bash
 npx webpack --colors --bail
-# 产物输出到 build/ 目录
+# 产物输出到 build/
 ```
 
-> 提示：项目内 `npm run build` 中的清理步骤可能被本机安全软件拦截，可直接用 `npx webpack --colors --bail` 构建。
+> `npm run build` 会先 `rimraf ./build`，这一步在部分机器上会被安全软件拦下来。构建失败时直接用上面的 `npx webpack` 即可。
 
-## 📁 目录结构
+---
+
+## 目录结构
 
 ```
 src/extension-builder/
-├── components/ExtensionBuilder.jsx   # 主组件（菜单 / Blockly 工作区 / 代码面板 / 弹窗）
+├── components/
+│   ├── ExtensionBuilder.jsx      主组件：菜单 / Blockly 工作区 / 代码面板 / 浮窗
+│   └── DebuggerPanel.jsx         调试器：Data URI 启动器
 ├── lib/
-│   ├── block-definitions.js          # 积木定义与代码生成器
-│   ├── extforge-runtime.js           # ExtForge 运行时（注入导出代码）
-│   ├── ext-addons.js                 # 编辑器插件系统（内置 + 自定义插件）
-│   ├── auth.js / saves.js / sync.js  # 账号 / 存档 / 跨站同步
-│   └── tw-lazy-scratch-blocks.js     # scratch-blocks 懒加载
-└── styles/extension-builder.css      # 样式（CSS Modules + :global 前缀）
-static/ext-addons-doc.html            # 插件开发与使用教程（独立页面）
+│   ├── block-definitions.js      积木定义与代码生成
+│   ├── ext-addons.js             插件系统：内置 / 市场 / 数据目录
+│   ├── bilup-nova/               AI 助手
+│   ├── auth.js / saves.js        账号与云存档
+│   └── tw-lazy-scratch-blocks.js scratch-blocks 懒加载
+└── styles/extension-builder.css
+
+ext-plugin-runtime.js             插件运行时（Node 侧）：扫描、部署、fork、反代
+build/main.js                     桌面端（Electron）主进程
+website/                          官网与 Cloudflare Pages Functions
+static/                           静态页面：编辑器入口、插件开发文档
+voice-decode.js                   语音解码服务（devServer 路由）
 ```
 
-## 🧩 自定义插件
+---
 
-在「🧩 编辑器插件」面板中点击「导入插件」，选择 `.js` 文件即可。插件结构：
-
-```js
-export default {
-  id: 'my-addon',          // 唯一标识
-  name: '我的插件',         // 显示名称
-  description: '说明',
-  css: '.blocklyMainBackground {}',  // 可选：自动注入 CSS
-  setup: function (ctx) {  // 必填：初始化，返回清理函数
-    const B = ctx.Blockly;
-    const ws = ctx.getWorkspace();
-    // ...
-    return function cleanup () {};
-  }
-};
-```
-
-完整文档见独立页面 **ext-addons-doc.html**（编辑器内「开发教程」按钮直达，或访问 `http://localhost:8601/ext-addons-doc.html`）。
-
-## 🎤 AI 面板语音输入（SenseVoiceSmall）
+## AI 面板语音输入（SenseVoiceSmall）
 
 AI 面板输入框旁的 🎤 按钮提供**完全本地**的语音转文字（浏览器录音 → 本机解码，音频不出机器）：
 
@@ -94,8 +165,25 @@ Copy-Item voice-models\sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17\{
 
 重启 `npm start` 后，接口自检：`GET http://localhost:8601/voice-api/status` 应返回 `{"runtime":true,"model":true,...}`。端到端测试：`node voice-test.js`。
 
-## ⚖️ 版权与致谢
+---
 
-- 本项目基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui)（GPL-3.0）二次开发，`LICENSE` 文件保留其原始许可证
-- 积木外观与翻译遵循 Scratch 3.0 / TurboWarp 设计规范
-- 感谢 [TurboWarp](https://turbowarp.org) 与 [Scratch 基金会](https://scratch.mit.edu) 的开源贡献
+## 参与贡献
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请走 [SECURITY.md](SECURITY.md)，不要开公开 Issue。
+
+---
+
+## 版权与致谢
+
+- 本项目基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui)（GPL-3.0）二次开发，`LICENSE` 保留原始许可证
+- 积木外观与翻译遵循 Scratch 3.0 / TurboWarp 设计规范，中文翻译来自 [LLK/scratch-l10n](https://github.com/LLK/scratch-l10n)
+- 语音识别：[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
+- 感谢 [TurboWarp](https://turbowarp.org) 与 [Scratch 基金会](https://scratch.mit.edu) 的开源工作
+
+Scratch 名称与 Scratch 猫等图形是 MIT 的商标，使用限制见 [TRADEMARK](TRADEMARK)。
+
+---
+
+## 许可
+
+[GPL-3.0](LICENSE)

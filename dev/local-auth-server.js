@@ -21,15 +21,30 @@ const PORT = 3458;
 //  QQ 邮箱 SMTP / IMAP 配置（本地开发用）
 //  - user：QQ 邮箱地址
 //  - pass：QQ 邮箱的 SMTP/IMAP 授权码（同一个码，两处通用）
+//
+//  凭据一律从环境变量读，源码里不留缺省值 —— 这个文件是 git 跟踪的，
+//  写死的授权码等同于公开。缺变量时直接启动失败，比「悄悄用一个错的码
+//  然后发信失败」好排查。启动前先设：
+//      set SMTP_USER=you@qq.com
+//      set SMTP_PASS=<你的授权码>
 // ============================================================
+function requireEnv(name) {
+    const v = process.env[name];
+    if (!v) {
+        console.error('缺少环境变量 ' + name + '（本地开发服务器需要 QQ 邮箱 SMTP/IMAP 凭据）');
+        process.exit(1);
+    }
+    return v;
+}
+
 const MAIL_CONFIG = {
-    host: 'smtp.qq.com',
-    port: 465,
-    imapHost: 'imap.qq.com',
-    imapPort: 993,
-    user: process.env.SMTP_USER || 'REMOVED_QQ_MAIL_ACCOUNT@qq.com',
-    pass: process.env.SMTP_PASS || 'REMOVED_QQ_SMTP_AUTH_CODE',
-    from: process.env.SMTP_FROM || 'scratchextensioneditor.cc.cd <REMOVED_QQ_MAIL_ACCOUNT@qq.com>'
+    host: process.env.SMTP_HOST || 'smtp.qq.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    imapHost: process.env.IMAP_HOST || 'imap.qq.com',
+    imapPort: Number(process.env.IMAP_PORT || 993),
+    user: requireEnv('SMTP_USER'),
+    pass: requireEnv('SMTP_PASS'),
+    from: process.env.SMTP_FROM || ('Scratch 扩展编辑器 <' + requireEnv('SMTP_USER') + '>')
 };
 
 // ============================================================

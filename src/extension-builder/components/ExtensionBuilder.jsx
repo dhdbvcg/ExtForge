@@ -34,6 +34,27 @@ import {LEGAL_DOCS} from '../lib/legal-docs.js';
 import DebuggerPanel from './DebuggerPanel.jsx';
 import '../styles/extension-builder.css';
 
+/**
+ * Blockly 的媒体资源目录（积木上的小图标、光标、点击音效都从这里取）。
+ *
+ * 为什么不能像原来那样写死 '/static/blocks-media/default/'：
+ * 这是个**绝对路径**，只在站点部署于根路径时成立。GitHub Pages 把项目站点
+ * 放在 /<仓库名>/ 子路径下，于是浏览器会去请求
+ *     https://<user>.github.io/static/blocks-media/...   → 404
+ * 而文件其实在
+ *     https://<user>.github.io/<仓库名>/static/blocks-media/...
+ * 表现就是工作区里所有 field_image 图标（画笔/音乐/wedo2/microbit 等）全裂开，
+ * 而本地 localhost 开发时因为部署在根路径，完全看不出问题。
+ *
+ * ROOT 由 webpack DefinePlugin 在构建时注入（见 webpack.config.js），
+ * 本地开发时为空串，线上构建时是 '/scratch-extension-editor/'。
+ */
+function blocklyMediaPath() {
+    var root = (typeof process !== 'undefined' && process.env && process.env.ROOT) || '/';
+    if (root.charAt(root.length - 1) !== '/') root += '/';
+    return root + 'static/blocks-media/default/';
+}
+
 // 积木预设颜色（Scratch 风格常用色，供积木定义面板选择）
 const BLOCK_COLOURS = [
     '#FF6680', // 红
@@ -685,7 +706,7 @@ const ExtensionBuilderInner = () => {
 
             // Set Blockly media path to local scratch-blocks media (avoid blockly-demo.appspot.com requests)
             if (Blockly.utils && typeof Blockly.utils._MEDIA_URL !== 'undefined') {
-                Blockly.utils._MEDIA_URL = '/static/blocks-media/default/';
+                Blockly.utils._MEDIA_URL = blocklyMediaPath();
             }
 
             // Register all custom blocks
@@ -812,7 +833,7 @@ const ExtensionBuilderInner = () => {
                 Blockly.utils = {};
             }
             if (typeof Blockly.utils._MEDIA_URL !== 'string') {
-                Blockly.utils._MEDIA_URL = '/static/blocks-media/default/';
+                Blockly.utils._MEDIA_URL = blocklyMediaPath();
             }
             // Initialize xml namespace if missing
             if (!Blockly.utils.xml) {
@@ -861,7 +882,7 @@ const ExtensionBuilderInner = () => {
             // category matching CB-ExtGallary layout.
             const workspace = Blockly.inject(blocklyDivRef.current, {
                 toolbox: toolboxXml,
-                media: '/static/blocks-media/default/',
+                media: blocklyMediaPath(),
                 grid: {
                     spacing: 25,
                     length: 3,
@@ -3546,6 +3567,7 @@ const ExtensionBuilderInner = () => {
             previewWorkspaceRef.current = Blockly.inject(host, {
                 renderer: 'scratch',
                 toolbox: '<xml></xml>',
+                media: blocklyMediaPath(),
                 sounds: false,
                 trashcan: false,
                 scrollbars: false,
@@ -3613,6 +3635,7 @@ const ExtensionBuilderInner = () => {
             panelWorkspaceRef.current = Blockly.inject(host, {
                 renderer: 'scratch',
                 toolbox: '<xml></xml>',
+                media: blocklyMediaPath(),
                 sounds: false,
                 trashcan: false,
                 scrollbars: false,

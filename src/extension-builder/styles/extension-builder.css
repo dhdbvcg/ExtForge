@@ -440,10 +440,9 @@
 }
 
 :global(.ext-settings-banner-placeholder) {
-    color: #999;
-    font-size: 28px;
-    line-height: 56px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 :global(.ext-settings-title) {
@@ -581,6 +580,10 @@
 }
 
 :global(.ext-settings-icon-empty) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     color: #999;
 }

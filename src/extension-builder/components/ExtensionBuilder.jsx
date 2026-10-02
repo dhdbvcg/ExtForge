@@ -5698,17 +5698,17 @@ const ExtensionBuilderInner = () => {
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'editor' ? 'active' : ''}`}
                                 onClick={() => setSettingsTab('editor')}
-                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>编辑器设置</button>
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>编辑器设置</button>
                             <button
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'addons' ? 'active' : ''}`}
                                 onClick={() => { setSettingsTab('addons'); setMarketView(false); }}
-                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="#5b21b6" stroke="#5b21b6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>插件管理</button>
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M12 3.5l2.6 5.3 5.9.86-4.25 4.14 1 5.86L12 16.92l-5.25 2.74 1-5.86L3.5 9.66l5.9-.86L12 3.5z"/></svg>插件管理</button>
                             <button
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'addons' && marketView ? 'active' : ''}`}
                                 onClick={() => { setSettingsTab('addons'); handleOpenMarket(); }}
-                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b21b6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><rect x="3" y="3" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v7"/><path d="M16 3v7"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="12" y1="12" x2="12" y2="18"/></svg>插件市场</button>
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M4 7.5L6 4h12l2 3.5"/><path d="M4 7.5h16v10.5a2 2 0 01-2 2H6a2 2 0 01-2-2V7.5z"/><path d="M9.5 11.5a2.5 2.5 0 005 0"/></svg>插件市场</button>
                         </div>
                         <div className="ext-settings-panes">
 
@@ -5724,7 +5724,15 @@ const ExtensionBuilderInner = () => {
                             {settingsDraft.blockIcon ? (
                                 <img src={settingsDraft.blockIcon} alt="icon" className="ext-settings-banner-icon" />
                             ) : (
-                                <div className="ext-settings-banner-icon ext-settings-banner-placeholder">⊞</div>
+                                <div className="ext-settings-banner-icon ext-settings-banner-placeholder">
+                                    <svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                                        {/* 四格积木：扩展构建器的语义化图形 */}
+                                        <rect x="7"  y="7"  width="15" height="15" rx="4" fill="#ef476f"/>
+                                        <rect x="26" y="7"  width="15" height="15" rx="4" fill="#ffb4a2"/>
+                                        <rect x="7"  y="26" width="15" height="15" rx="4" fill="#f78da7"/>
+                                        <rect x="26" y="26" width="15" height="15" rx="4" fill="#e5484d"/>
+                                    </svg>
+                                </div>
                             )}
                         </div>
                         <h2 className="ext-settings-title">创建扩展</h2>
@@ -5839,7 +5847,10 @@ const ExtensionBuilderInner = () => {
                                     {settingsDraft.categoryIcon ? (
                                         <img src={settingsDraft.categoryIcon} alt="category" />
                                     ) : (
-                                        <span className="ext-settings-icon-empty">未选择图标</span>
+                                        <span className="ext-settings-icon-empty">
+                                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c3c6d4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-4.5-4.5L7 20"/></svg>
+                                            <span>未选择图标</span>
+                                        </span>
                                     )}
                                 </div>
                                 <div className="ext-settings-icon-actions">
@@ -5864,7 +5875,10 @@ const ExtensionBuilderInner = () => {
                                     {settingsDraft.blockIcon ? (
                                         <img src={settingsDraft.blockIcon} alt="block" />
                                     ) : (
-                                        <span className="ext-settings-icon-empty">未选择图标</span>
+                                        <span className="ext-settings-icon-empty">
+                                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c3c6d4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="7" width="16" height="10" rx="4"/><circle cx="9.5" cy="12" r="1.6"/><circle cx="14.5" cy="12" r="1.6"/><path d="M4 10.5H2.5M21.5 10.5H20" strokeLinecap="round"/></svg>
+                                            <span>未选择图标</span>
+                                        </span>
                                     )}
                                 </div>
                                 <div className="ext-settings-icon-actions">

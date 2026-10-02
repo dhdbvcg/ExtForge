@@ -475,7 +475,7 @@ const ExtensionBuilderInner = () => {
         installVoiceInput();
     }, []);
     const installFileRef = useRef(null);
-    // 统一设置面板（含编辑器设置 + 插件管理标签页）
+    // 统一设置面板（含扩展设置 + 插件管理标签页）
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
     const [settingsTab, setSettingsTab] = useState('editor'); // 'editor' | 'addons'
     const settingsPanelRef = useRef(null); // 设置悬浮框 DOM 引用
@@ -5148,7 +5148,7 @@ const ExtensionBuilderInner = () => {
                             </div>
                         )}
                     </div>
-                    <button className="ext-menu-btn" onClick={handleOpenSettings} title="编辑器设置与插件管理">
+                    <button className="ext-menu-btn" onClick={handleOpenSettings} title="扩展设置与插件管理">
                         <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                         <span className="ext-menu-btn-label">设置</span>
                     </button>
@@ -5657,7 +5657,7 @@ const ExtensionBuilderInner = () => {
                 </div>
             </div>
 
-            {/* 统一设置面板（编辑器设置 + 插件管理）— 实时协作风格悬浮框 */}
+            {/* 统一设置面板（扩展设置 + 插件管理）— 实时协作风格悬浮框 */}
             {showSettingsPanel && settingsDraft && (
                 <React.Fragment>
                 {/* 自由拉伸层（8 方向手柄，面板打开时常驻显示） */}
@@ -5715,7 +5715,7 @@ const ExtensionBuilderInner = () => {
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'editor' ? 'active' : ''}`}
                                 onClick={() => setSettingsTab('editor')}
-                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>编辑器设置</button>
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>扩展设置</button>
                             <button
                                 type="button"
                                 className={`ext-settings-tab ${settingsTab === 'addons' ? 'active' : ''}`}
@@ -5729,7 +5729,7 @@ const ExtensionBuilderInner = () => {
                         </div>
                         <div className="ext-settings-panes">
 
-                        {/* ===== 编辑器设置标签页 ===== */}
+                        {/* ===== 扩展设置标签页 ===== */}
                         {settingsTab === 'editor' && (
                             <div className="ext-settings-tab-content">
                         <div

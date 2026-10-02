@@ -588,6 +588,58 @@
     color: #999;
 }
 
+/* ===== 快捷键标签页 ===== */
+:global(.ext-shortcuts-tab-content) {
+    padding: 16px 18px;
+    overflow-y: auto;
+}
+:global(.ext-shortcuts-hint) {
+    font-size: 11px;
+    color: #80868b;
+    line-height: 1.7;
+    margin: 0 0 12px;
+}
+:global(.ext-shortcuts-group) {
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: #fafbfc;
+}
+:global(.ext-shortcuts-group-title) {
+    font-size: 12px;
+    font-weight: 600;
+    color: #5f6368;
+    margin-bottom: 8px;
+}
+:global(.ext-shortcuts-row) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border-bottom: 1px dashed #eef0f2;
+}
+:global(.ext-shortcuts-row:last-child) {
+    border-bottom: none;
+}
+:global(.ext-shortcuts-desc) {
+    font-size: 12.5px;
+    color: #202124;
+}
+:global(.ext-shortcuts-key) {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 11px;
+    color: #3c4043;
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 :global(.ext-settings-icon-actions) {
     display: flex;
     justify-content: center;

@@ -4255,17 +4255,52 @@ const ExtensionBuilderInner = () => {
     }, []);
 
     // 快捷键：Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Z 撤销 / Ctrl+Y 重做（对齐 Bilup；放 handlers 定义之后避免 TDZ）
+    // 以及界面快捷键：Ctrl+, 设置 / Ctrl+Shift+B 制作积木 / Ctrl+Shift+D 调试器
+    //              / Ctrl+Shift+P 预览 / Ctrl+Shift+C 复制代码 / Ctrl+Shift+E 插件市场
+    // 完整清单见设置面板「快捷键」标签页（与这里必须同步改）。
     useEffect(() => {
         const onKey = (e) => {
-            if (!(e.ctrlKey || e.metaKey)) return;
             const k = (e.key || '').toLowerCase();
+            const editable = (() => {
+                const t = e.target;
+                return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+            })();
+            const inBlockly = (() => {
+                const t = e.target;
+                return t && t.closest && t.closest('.blocklySvg, .blocklyTreeRoot, .blocklyFlyout');
+            })();
+
+            // ── Ctrl+Shift 系列：界面功能 ──
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+                // 输入框里不抢 Shift 组合键（用户可能在输入大写/符号）
+                if (editable || inBlockly) return;
+                if (k === 'b') { e.preventDefault(); setShowEditMenu(false); setShowBlockBuilder(true); setBuilderMinimized(false); setBuilderMaximized(false); setBuilderModalPos(null); setBuilderSize(null); return; }
+                if (k === 'd') { e.preventDefault(); setShowEditMenu(false); handleOpenDebugger(); return; }
+                if (k === 'p') { e.preventDefault(); setShowFileMenu(false); handleOpenPreview(); return; }
+                if (k === 'c') { e.preventDefault(); handleCopyCode(); return; }
+                if (k === 'e') { e.preventDefault(); setShowSettingsPanel(true); setSettingsTab('addons'); setMarketView(true); return; }
+                return;
+            }
+
+            // ── Ctrl+, 打开设置（无 Shift，避免与 Ctrl+Shift 系列冲突）──
+            if ((e.ctrlKey || e.metaKey) && k === ',') {
+                e.preventDefault();
+                handleOpenSettings();
+                return;
+            }
+
+            // ── Esc 关闭设置面板（优先级高于面板内其他 Esc 行为）──
+            if (e.key === 'Escape' && showSettingsPanel && !settingsMinimized) {
+                // 焦点在输入框里时 Esc 先让浏览器退出输入态，再按一次才关面板
+                if (!editable) { e.preventDefault(); handleCloseSettings(); }
+                return;
+            }
+
+            if (!(e.ctrlKey || e.metaKey)) return;
             if (k === 'o') { e.preventDefault(); handleLoadExtension(); return; }
             if (k === 's') { e.preventDefault(); handleExport(); return; }
             if (k === 'z' || k === 'y') {
                 // 输入框交给浏览器原生撤销、Blockly 工作区交给 Blockly 自己的快捷键
-                const t = e.target;
-                const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-                const inBlockly = t && t.closest && t.closest('.blocklySvg, .blocklyTreeRoot, .blocklyFlyout');
                 if (editable || inBlockly) return;
                 e.preventDefault();
                 if (k === 'z') handleUndo(); else handleRedo();
@@ -4273,7 +4308,7 @@ const ExtensionBuilderInner = () => {
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [handleLoadExtension, handleExport, handleUndo, handleRedo]);
+    }, [handleLoadExtension, handleExport, handleUndo, handleRedo, handleOpenSettings, handleCloseSettings, handleOpenDebugger, handleOpenPreview, handleCopyCode, showSettingsPanel, settingsMinimized]);
 
     // ---- 登录 / 存档 / 跨站同步 handlers ----
 
@@ -5726,6 +5761,12 @@ const ExtensionBuilderInner = () => {
                                 className={`ext-settings-tab ${settingsTab === 'addons' && marketView ? 'active' : ''}`}
                                 onClick={() => { setSettingsTab('addons'); handleOpenMarket(); }}
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M4 7.5L6 4h12l2 3.5"/><path d="M4 7.5h16v10.5a2 2 0 01-2 2H6a2 2 0 01-2-2V7.5z"/><path d="M9.5 11.5a2.5 2.5 0 005 0"/></svg>插件市场</button>
+                            <button
+                                type="button"
+                                className={`ext-settings-tab ${settingsTab === 'shortcuts' ? 'active' : ''}`}
+                                onClick={() => setSettingsTab('shortcuts')}
+                                title="查看全部快捷键"
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></svg>快捷键</button>
                         </div>
                         <div className="ext-settings-panes">
 
@@ -5927,6 +5968,45 @@ const ExtensionBuilderInner = () => {
                                 onClick={handleApplySettings}
                             >完成</button>
                         </div>
+                            </div>
+                        )}
+
+                        {/* ===== 快捷键标签页 ===== */}
+                        {settingsTab === 'shortcuts' && (
+                            <div className="ext-settings-tab-content ext-shortcuts-tab-content">
+                                <p className="ext-shortcuts-hint">以下快捷键在编辑器页面全局生效。标注「输入框内不可用」的组合键，是为了不干扰正常打字。</p>
+                                <div className="ext-shortcuts-group">
+                                    <div className="ext-shortcuts-group-title">文件与编辑</div>
+                                    {[
+                                        ['Ctrl + O', '加载扩展文件'],
+                                        ['Ctrl + S', '导出扩展 JS'],
+                                        ['Ctrl + Z', '撤销（输入框/工作区内不可用）'],
+                                        ['Ctrl + Y', '重做（输入框/工作区内不可用）']
+                                    ].map(([k, d]) => (
+                                        <div key={k} className="ext-shortcuts-row">
+                                            <span className="ext-shortcuts-desc">{d}</span>
+                                            <kbd className="ext-shortcuts-key">{k}</kbd>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="ext-shortcuts-group">
+                                    <div className="ext-shortcuts-group-title">界面与工具</div>
+                                    {[
+                                        ['Ctrl + ,', '打开扩展设置'],
+                                        ['Ctrl + Shift + B', '制作积木'],
+                                        ['Ctrl + Shift + D', '调试器（Data URI 在线测试）'],
+                                        ['Ctrl + Shift + P', '扩展积木预览'],
+                                        ['Ctrl + Shift + C', '复制完整代码'],
+                                        ['Ctrl + Shift + E', '打开插件市场'],
+                                        ['Esc', '关闭设置面板（输入框内不可用）']
+                                    ].map(([k, d]) => (
+                                        <div key={k} className="ext-shortcuts-row">
+                                            <span className="ext-shortcuts-desc">{d}</span>
+                                            <kbd className="ext-shortcuts-key">{k}</kbd>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="ext-shortcuts-hint">macOS 上 Ctrl 对应 ⌘ Command。</p>
                             </div>
                         )}
 

@@ -421,17 +421,11 @@ export default {
 }
 :global(.rtc-toast-close:hover) { background: #f1f3f4; }
 
-/* 「工具」下拉菜单注入项 */
-:global(.rtc-tools-menu-item) {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px; cursor: pointer;
-    font-size: 13px; color: #333; font-family: inherit;
-    border-radius: 4px; transition: background .12s;
-}
-:global(.rtc-tools-menu-item:hover) { background: rgba(0,0,0,.06); }
+/* 「工具」下拉菜单的入口项由 React 渲染（ExtensionBuilder.jsx），
+   插件不再注入 DOM，也就不需要 .rtc-tools-menu-item 样式了。 */
 `,
     setup: async function (ctx) {
-        const { document, window, createElement, addToolbarButton, mountPanel, effect } = ctx;
+        const { document, window, createElement, mountPanel, effect } = ctx;
 
         // ─── 配置 ───
         // PeerJS 信令服务器（按优先级尝试）
@@ -1924,55 +1918,21 @@ export default {
         }
 
         let triggerBtn = null;
-        const toolsBtn = Array.from(document.querySelectorAll('button, [role=button], .ext-menu-btn, [class*="menu"]'))
-            .find(el => el.textContent.trim() === '工具' || el.title === '工具' || el.getAttribute('aria-label') === '工具');
 
-        if (toolsBtn) {
-            // 找到「工具」按钮 → 注入菜单项到其下拉面板
-            // 等待下拉面板出现（首次点击时创建或已存在）
-            const tryInject = () => {
-                // 常见下拉面板选择器（按优先级）
-                const dropdown = toolsBtn.parentElement.querySelector('[class*="dropdown"], [class*="popover"], [class*="menu-list"], [role="menu"], [class*="popup"]')
-                    || toolsBtn.nextElementSibling
-                    || toolsBtn.closest('[class*="menu"]')?.querySelector('[class*="list"], [class*="items"], [role="listbox"]');
-                if (!dropdown) return false;
-
-                // 避免重复注入
-                if (dropdown.querySelector('.rtc-tools-menu-item')) return true;
-
-                const item = createElement('div', { className: 'rtc-tools-menu-item' }, ['🤝 实时协作']);
-                item.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    togglePanel();
-                    // 关闭下拉（模拟点击外部）
-                    document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                });
-                dropdown.appendChild(item);
-                return true;
-            };
-
-            // 立即尝试（下拉可能已渲染）
-            if (!tryInject()) {
-                // 监听点击「工具」按钮后注入（下拉动态创建）
-                const onClickCapture = () => {
-                    requestAnimationFrame(() => { tryInject(); });
-                    // 注入成功后移除监听
-                    setTimeout(() => {
-                        if (document.querySelector('.rtc-tools-menu-item')) {
-                            toolsBtn.removeEventListener('click', onClickCapture);
-                        }
-                    }, 500);
-                };
-                toolsBtn.addEventListener('click', onClickCapture);
-            }
-
-            // 同时保留一个隐藏的工具栏按钮作为备用入口（CSS 隐藏，仅作 registerDisposer 占位）
-            triggerBtn = addToolbarButton('🤝 实时协作', togglePanel);
-            triggerBtn.style.display = 'none';
-        } else {
-            // 降级：无「工具」菜单，使用独立工具栏按钮
-            triggerBtn = addToolbarButton('🤝 实时协作', togglePanel);
-        }
+        // 菜单入口只在 React 的「工具」下拉里（ExtensionBuilder.jsx 5164 行，
+        // 派发 ext-toggle-realtime-collab 事件，上面已监听）。
+        //
+        // 这里**刻意不再往 DOM 里注入菜单项**。历史上有过一段 tryInject()：
+        // 按文本找到「工具」按钮，往它的下拉面板 appendChild 一个
+        // 「🤝 实时协作」。问题在于那个下拉是 React 的条件渲染节点
+        // （showToolsMenu && <div className="ext-tools-menu">），每次打开都是
+        // 全新节点 —— 守卫 querySelector('.rtc-tools-menu-item') 永远查不到
+        // 上一次注入的项，于是每次打开菜单都再塞一个，和 React 自己渲染的
+        // 那一项叠成两个「实时协作」。
+        //
+        // triggerBtn 保留为 null：cleanup 里的判空引用不删，将来若需要
+        // 「无 React 菜单的宿主」降级入口，从这里恢复赋值即可。
+        void triggerBtn;
 
         // 检查 URL 是否带房间ID
         checkUrlForRoom();

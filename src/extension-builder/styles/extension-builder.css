@@ -872,6 +872,16 @@
 :global(.blocklyToolboxDiv) {
     background-color: #f7f7f7 !important;
     border-right: 1px solid #d0d0d0 !important;
+    /* 分类列内容比 Blockly 布局时用的 60px 宽：滚动条约占 16px，
+       溢出部分正好压在 flyout 最左侧，把积木开头裁掉一条。
+       这里把滚动条隐藏（滚轮仍可滚动分类列表），让视觉宽度回到
+       布局宽度 —— flyout 与分类列才能严丝合缝。 */
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    overflow-y: auto !important;
+}
+:global(.blocklyToolboxDiv::-webkit-scrollbar) {
+    display: none !important;
 }
 
 /* ---- Flyout: 加宽至 280px（Blockly 默认 250px 太窄，长积木/多输入框积木右侧被裁切） ---- */
@@ -881,8 +891,18 @@
 
 :global(.blocklyTreeRow) {
     margin: 0 !important;
-    padding: 6px 12px !important;
+    padding: 6px 8px !important;
     cursor: pointer !important;
+}
+
+/* 分类栏收窄：Blockly 布局时按 60px 给 flyout 定位，但分类条目
+   （13px 字 + 8px 内边距）只需 ~45px。scrollbar-width:none 已消除
+   滚动条溢出；这里再把工具箱整体压到 45px，flyout 跟着左移 15px，
+   分类文字仍完整显示。 */
+:global(.blocklyToolboxDiv) {
+    width: 45px !important;
+    min-width: 45px !important;
+    max-width: 45px !important;
 }
 
 :global(.blocklyTreeRow:hover) {

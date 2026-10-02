@@ -960,49 +960,106 @@ const ExtensionBuilderInner = () => {
                 // Re-apply scale after resize (resizeSvg may reset it)
                 try { if (workspace.setScale) workspace.setScale(0.55); } catch(e) {}
 
-                // 修复 flyout clip-path 尺寸不匹配问题：
-                // Blockly 默认创建的 clipPath rect (248×438) 比 flyout 实际尺寸 (250×442) 小，
-                // 导致边缘积木被多余裁切。此处同步 clip-path 到 flyout 实际尺寸。
+                // ─── flyout 几何对齐（CSS 改不动的部分在这里改）───
+                // scratch-blocks 的布局坐标是两处写死的常量算出来的：
+                //   flyout.left = Toolbox.width(310) - Flyout.DEFAULT_WIDTH(250) = 60
+                // CSS 里 .blocklyFlyout{width:280px} 只改视觉盒子，Blockly 的
+                // 布局坐标不认 —— 结果 flyout 视觉 280 宽、坐标仍按 250 定位，
+                // 多出的 30px 直接叠在工作区上；工具箱分类栏也一样，改窄后
+                // flyout 不会跟着左移。所以必须在实例上同步改这两个常量：
+                const TOOLBOX_W = 45;   // 与 CSS 的 .blocklyToolboxDiv{width:45px} 一致
+                const FLYOUT_W = 280;   // 与 CSS 的 .blocklyFlyout{width:280px} 一致
                 try {
-                    const flyout = document.querySelector('.blocklyFlyout');
-                    const clipRect = document.getElementById('blocklyBlockMenuClipRect');
-                    if (flyout && clipRect) {
-                        const fr = flyout.getBoundingClientRect();
-                        clipRect.setAttribute('width', Math.max(1, Math.round(fr.width)));
-                        clipRect.setAttribute('height', Math.max(1, Math.round(fr.height)));
-                    }
+                    if (workspace.toolbox_) workspace.toolbox_.width = TOOLBOX_W + FLYOUT_W;
+                    const flyoutApi = workspace.getFlyout ? workspace.getFlyout() : null;
+                    if (flyoutApi) flyoutApi.DEFAULT_WIDTH = FLYOUT_W;
+                } catch (e) { /* 旧版无 toolbox_ 字段时忽略 */ }
 
-                    // 修复 flyout 积木左侧被裁切：
-                    // Blockly 默认 translateX=0 导致积木左边缘紧贴 flyout 左边界，
-                    // 帽子形状弧形和文字开头被截断。右移 15px 给积木留出左侧边距。
-                    const canvas = flyout.querySelector('.blocklyBlockCanvas');
-                    if (canvas) {
+                // 修复 flyout 积木左侧被裁切：
+                // Blockly 默认 translateX=0 导致积木左边缘紧贴 flyout 左边界，
+                // 帽子形状弧形和文字开头被截断。
+                //
+                // 为什么做成幂等函数 + MutationObserver 而不是老的一次性 +15px：
+                // flyout 的积木画布 transform 会被 Blockly 在**每次**分类切换 /
+                // flyout 滚动 / 窗口 resize 时重新计算并写回 translateX=0，
+                // 一次性补丁在下一次重排后就丢了 —— 用户看到的正是
+                // 「刚打开是好的，切了个分类积木又被挡住」。这里改为：
+                // 给 flyout 留出固定左边距（MATARGIN_X=15），并观察 transform
+                // 属性变化，一旦被 Blockly 重置就立即补回。
+                const FLYOUT_MARGIN_X = 15;
+                const patchFlyoutOffset = () => {
+                    try {
+                        const flyout = document.querySelector('.blocklyFlyout');
+                        if (!flyout) return;
+
+                        // 让 Blockly 按新的常量重新定位 flyout（等价于分类切换时
+                        // 的重排），常量已在上方改过：left = toolbox.width - 280
+                        const flyoutApi = workspace.getFlyout ? workspace.getFlyout() : null;
+                        if (flyoutApi && typeof flyoutApi.position === 'function') {
+                            flyoutApi.position();
+                        }
+
+                        // 同步 clip-path 到 flyout 实际尺寸：Blockly 默认的
+                        // clipPath rect 比 flyout 小几像素，边缘积木会被多裁一条。
+                        const clipRect = document.getElementById('blocklyBlockMenuClipRect');
+                        if (clipRect) {
+                            const fr = flyout.getBoundingClientRect();
+                            clipRect.setAttribute('width', Math.max(1, Math.round(fr.width)));
+                            clipRect.setAttribute('height', Math.max(1, Math.round(fr.height)));
+                        }
+
+                        const canvas = flyout.querySelector('.blocklyBlockCanvas');
+                        if (!canvas) return;
                         const t = canvas.getAttribute('transform') || '';
                         const m = t.match(/translate\(([^,]+),\s*([^)]+)\)/);
-                        if (m) {
-                            const x = parseFloat(m[1]) + 15;
-                            const y = m[2];
-                            canvas.setAttribute('transform',
-                                'translate(' + x + ',' + y + ') scale(0.55)');
-                        }
+                        if (!m) return;
+                        const curX = parseFloat(m[1]);
+                        if (Math.abs(curX - FLYOUT_MARGIN_X) < 0.5) return; // 已是目标值
+                        canvas.setAttribute('transform',
+                            'translate(' + FLYOUT_MARGIN_X + ',' + m[2] + ') scale(0.55)');
+                    } catch (e) { /* flyout 未渲染完，等下一轮 */ }
+                };
+
+                // 初始补一次（rAF 后 flyout 已渲染）
+                patchFlyoutOffset();
+
+                // 持续盯住：transform 被 Blockly 重写 → 立即补回。
+                // 只看 transform 属性变化，开销可忽略。
+                //
+                // 为什么挂在 document.body 而不是 .blockly-host：
+                // 这个 rAF 闭包只在组件挂载后跑一次，而 devServer 热更新 /
+                // 组件重挂载会替换掉 .blockly-host 节点 —— 挂在旧节点上的
+                // observer 随旧节点一起失效，但 `__flyoutOffsetObserver`
+                // 标记查不到时注册代码也不会再跑（闭包已结束），observer
+                // 就这样静默丢失。挂在 body 上不受子树重建影响，单例标记
+                // 也只属于 body 一个节点，生命周期与页面相同。
+                try {
+                    if (!document.body.__flyoutOffsetObserver) {
+                        const obs = new MutationObserver(patchFlyoutOffset);
+                        obs.observe(document.body, {
+                            subtree: true,
+                            attributes: true,
+                            attributeFilter: ['transform']
+                        });
+                        document.body.__flyoutOffsetObserver = obs;
                     }
-                } catch(e) { console.warn('[ExtBuilder] flyout fix failed:', e); }
+                } catch (e) { /* 观察 API 不可用时退化为初始补丁 */ }
             });
             // Also resize on a delayed schedule as a safety net
             const resizeTimer = setTimeout(() => {
                 forceResize();
                 try { if (workspace.setScale) workspace.setScale(0.55); } catch(e) {}
-                // 延迟修复：flyout 可能在 250ms 后才完全渲染，再次右移积木
+                // 延迟修复：flyout 可能在 250ms 后才完全渲染，再补一次偏移
+                // （patchFlyoutOffset 定义在上方 rAF 闭包里，这里直接查 DOM 重做）
                 try {
                     const flyout2 = document.querySelector('.blocklyFlyout');
                     const canvas2 = flyout2 ? flyout2.querySelector('.blocklyBlockCanvas') : null;
                     if (canvas2) {
                         const t2 = canvas2.getAttribute('transform') || '';
                         const m2 = t2.match(/translate\(([^,]+),\s*([^)]+)\)/);
-                        if (m2) {
-                            const x2 = parseFloat(m2[1]) + 15;
+                        if (m2 && Math.abs(parseFloat(m2[1]) - 15) >= 0.5) {
                             canvas2.setAttribute('transform',
-                                'translate(' + x2 + ',' + m2[2] + ') scale(0.55)');
+                                'translate(15,' + m2[2] + ') scale(0.55)');
                         }
                     }
                 } catch(e2) {}

@@ -1,0 +1,9 @@
+{
+  "id": "workbuddy-bridge",
+  "name": "WorkBuddy 模型桥",
+  "version": "1.0.0",
+  "author": "dhdbvcg",
+  "category": "AI",
+  "description": "把 WorkBuddy 桌面端登录态桥给编辑器 AI 助手：多账号轮询、SSE 流式、15 个模型（DeepSeek/GLM/Kimi/MiniMax），额度与桌面端共用。设置面板一键配置。",
+  "entry": "server.mjs"
+}

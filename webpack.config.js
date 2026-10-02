@@ -77,6 +77,38 @@ const base = {
             // 端口可用 DSH_WEB_PORT 覆盖（默认 3080）。
             const DSH_WEB_PORT = parseInt(process.env.DSH_WEB_PORT, 10) || 3080;
             const DSW_PREFIX = '/deepseek-web-vision/api';
+
+            // ── workbuddy-bridge 同源反代 ──
+            // 注意：这里不能用 app.use('/workbuddy-ai/api', ...) —— devServer 3.x
+            // 传给 before 的 app 挂在内部中间件栈里，实测带前缀的 app.use 永远
+            // 匹配不上（同栈的 app.get 精确路由却正常），表现为 404。改成无前缀
+            // 中间件 + 手动路径匹配，行为等价。
+            app.use((req, res, next) => {
+                const p = String(req.url || '').split('?')[0];
+                if (p !== '/workbuddy-ai/api' && p.indexOf('/workbuddy-ai/api/') !== 0) return next();
+                const http = require('http');
+                const pluginPort = pluginRuntime.portFor(p);
+                if (!pluginPort) {
+                    res.status(502).json({error: 'workbuddy-bridge 插件未运行'});
+                    return;
+                }
+                const up = http.request({
+                    hostname: '127.0.0.1',
+                    port: pluginPort,
+                    path: p,
+                    method: req.method,
+                    headers: Object.assign({}, req.headers, {host: '127.0.0.1:' + pluginPort})
+                }, (r) => {
+                    res.writeHead(r.statusCode || 502, r.headers);
+                    r.pipe(res);
+                });
+                up.on('error', (e) => {
+                    if (res.headersSent) { res.end(); return; }
+                    res.status(502).json({error: 'workbuddy-bridge 服务不可达：' + String(e && e.message || e)});
+                });
+                req.pipe(up);
+            });
+
             app.use(DSW_PREFIX, (req, res) => {
                 const http = require('http');
 
@@ -265,6 +297,28 @@ const base = {
                 } catch (e) {
                     res.status(500).json({ok: false, error: String(e && e.message || e)});
                 }
+            });
+
+            // 启动单个插件的 Node 侧服务。
+            // devServer 启动时 start() 只拉起当时已存在的插件；用户把新插件
+            // 拷进 plugins 目录（或市场装完）后，页面需要一条「后装后启」的路。
+            app.post('/ext-plugins/start', (req, res) => {
+                let raw = '';
+                req.on('data', (c) => {
+                    raw += c;
+                    if (raw.length > 4096) req.destroy();
+                });
+                req.on('end', () => {
+                    let id = '';
+                    try { id = String((JSON.parse(raw || '{}') || {}).id || ''); } catch (e) { /* 下面统一报错 */ }
+                    if (!id) return res.status(400).json({ok: false, error: '缺少 id 参数'});
+                    try {
+                        const out = pluginRuntime.startById(id);
+                        res.status(out.ok ? 200 : 400).json(out);
+                    } catch (e) {
+                        res.status(500).json({ok: false, error: String(e && e.message || e)});
+                    }
+                });
             });
 
             // 删除插件目录。内置（随编辑器分发）的会被运行时拒绝，见 removePlugin()。

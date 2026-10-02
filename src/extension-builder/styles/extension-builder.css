@@ -946,6 +946,9 @@
     flex-shrink: 0;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     user-select: none;
+    /* 积木计数徽章是 absolute 钉在菜单栏右端的（见 .ext-block-count-badge），
+       需要这里作为定位基准。 */
+    position: relative;
 }
 
 :global(.ext-menu-bar-left),
@@ -3660,8 +3663,16 @@
     word-break: break-all;
 }
 
-/* ── 积木数量徽章（菜单栏右侧）── */
+/* ── 积木数量徽章 ──
+   钉在菜单栏右端、AI 按钮（bilup-nova 异步注入的 .sa-nova，约 60px 宽）
+   左侧：absolute 定位是刻意的 —— AI 按钮不是 React 子节点，徽章插进
+   它前面会被 React 重渲染挤掉；absolute 只要求菜单栏自身 relative，
+   不参与 flex 流，右侧留出 AI 按钮的宽度即可。 */
 :global(.ext-block-count-badge) {
+    position: absolute;
+    right: 72px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -3675,6 +3686,7 @@
     transition: background .15s;
     user-select: none;
     white-space: nowrap;
+    z-index: 5;
 }
 :global(.ext-block-count-badge:hover) {
     background: rgba(255, 255, 255, 0.3);

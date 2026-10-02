@@ -5325,18 +5325,12 @@ const ExtensionBuilderInner = () => {
                     <span className="ext-menu-ext-id">({extInfo.id})</span>
                 </div>
                 <div className="ext-menu-bar-right">
-                    <button className="ext-menu-btn" onClick={handleLoadExtension} title="加载扩展">
-                        <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        <span className="ext-menu-btn-label">加载</span>
-                    </button>
-                    <button className="ext-menu-btn" onClick={handleExport} title="导出 .js 文件">
-                        <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        <span className="ext-menu-btn-label">导出</span>
-                    </button>
-                    <button className="ext-menu-btn ext-menu-btn-warn" onClick={handleReset} title="重置工作区">
-                        <svg className="ext-menu-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                        <span className="ext-menu-btn-label">重置</span>
-                    </button>
+                    {/* 加载 / 导出 / 重置三个按钮已从顶部移除（2026-10）：
+                        它们在文件菜单里都有等价入口，顶栏只留扩展名与计数。
+                        计数徽章单独钉在菜单栏右端、AI 按钮左侧 —— AI 按钮是
+                        bilup-nova 的 bundle 异步注入的（.sa-nova），不是 React
+                        子节点，所以徽章用 absolute 定位贴过去，而不是插到
+                        React 树里 AI 按钮前面（插进别人管理的 DOM 会被挤掉）。 */}
                     <div className="ext-block-count-badge" onClick={() => setShowStatsPanel(v => !v)} title="点击查看项目数据分析">
                         <span className="ext-block-count-num">{projectStats.blockCount}</span>
                         <span className="ext-block-count-label">个积木</span>

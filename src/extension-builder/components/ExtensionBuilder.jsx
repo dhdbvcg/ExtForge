@@ -56,14 +56,18 @@ function blocklyMediaPath() {
 }
 
 // 积木预设颜色（Scratch 风格常用色，供积木定义面板选择）
+// 第一格是「跟随扩展主题色」：colour 为空时积木实际用 extInfo.color1 渲染，
+// 色板必须有一格能表达这个状态，否则 UI 显示的选中色和积木本体对不上
+// （曾出现：积木是主题粉色，色板却把紫色框出来，用户以为选错了色）。
 const BLOCK_COLOURS = [
+    '__THEME__', // 跟随扩展主题色（resolveBlockColour 的空 colour 分支）
     '#FF6680', // 红
     '#FFAB19', // 橙
     '#FFD500', // 黄
     '#59C059', // 绿
     '#0FBD8C', // 青
     '#4C97FF', // 蓝
-    '#9966FF', // 紫（默认）
+    '#9966FF', // 紫
     '#A66F48'  // 棕
 ];
 
@@ -5492,20 +5496,33 @@ const ExtensionBuilderInner = () => {
                                             <input
                                                 type="color"
                                                 className="ext-block-colour-input"
-                                                value={/^#[0-9a-fA-F]{6}$/.test(currentBlock.colour || '') ? currentBlock.colour : '#9966FF'}
+                                                value={resolveBlockColour(currentBlock, extInfo.color1)}
                                                 onChange={(e) => handleUpdateBlock(currentBlock.id, {colour: e.target.value})}
-                                                title="自定义颜色"
+                                                title={currentBlock.colour ? '自定义颜色' : '当前跟随扩展主题色，点击可选任意颜色'}
                                             />
-                                            {BLOCK_COLOURS.map(c => (
-                                                <button
-                                                    key={c}
-                                                    type="button"
-                                                    className={'ext-block-colour-swatch' + (currentBlock.colour === c ? ' ext-block-colour-swatch-active' : '')}
-                                                    style={{background: c}}
-                                                    onClick={() => handleUpdateBlock(currentBlock.id, {colour: currentBlock.colour === c ? '' : c})}
-                                                    title={c}
-                                                />
-                                            ))}
+                                            {BLOCK_COLOURS.map(c => {
+                                                // __THEME__：跟随扩展主题色。显示为主题色本身，
+                                                // 点击 = 清空自定义色（回到 resolveBlockColour 的 fallback 分支）；
+                                                // 高亮条件 = 当前实际生效色恰好是主题色且无自定义色。
+                                                const isTheme = c === '__THEME__';
+                                                // 高亮互斥：无自定义色时只亮主题格（即使主题色
+                                                // 恰好与某预设同值）；有自定义色时只亮匹配的那格。
+                                                const isActive = isTheme
+                                                    ? !currentBlock.colour
+                                                    : !!currentBlock.colour && currentBlock.colour.toLowerCase() === c.toLowerCase();
+                                                return (
+                                                    <button
+                                                        key={c}
+                                                        type="button"
+                                                        className={'ext-block-colour-swatch' + (isActive ? ' ext-block-colour-swatch-active' : '')}
+                                                        style={isTheme
+                                                            ? {background: `linear-gradient(135deg, ${extInfo.color1}, ${extInfo.color2 || extInfo.color1})`}
+                                                            : {background: c}}
+                                                        onClick={() => handleUpdateBlock(currentBlock.id, {colour: isTheme ? '' : (currentBlock.colour === c ? '' : c)})}
+                                                        title={isTheme ? '跟随扩展主题色' : c}
+                                                    />
+                                                );
+                                            })}
                                             {!!currentBlock.colour && (
                                                 <button
                                                     type="button"

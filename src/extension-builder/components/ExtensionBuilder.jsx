@@ -2459,16 +2459,26 @@ const ExtensionBuilderInner = () => {
                 const ws = workspaceRef.current;
                 if (!ws) return {success: false, error: '工作区尚未就绪'};
                 const B = window._extBuilderBlockly || window.Blockly || {};
-                const type = String(a.type == null ? '' : a.type).trim();
+                let type = String(a.type == null ? '' : a.type).trim();
                 if (!type) return {success: false, error: 'addWorkspaceBlock 需要 type（积木类型，先用 listToolboxBlocks 查）'};
-                if (!(B.Blocks && B.Blocks[type])) {
-                    return {success: false, error: '未知积木类型：' + type + '（先用 listToolboxBlocks 查可用类型）'};
-                }
                 // block_define 是「积木定义」卡片，由 customBlocks 列表驱动（addBlock /
                 // deleteBlock 管）。在画布上手动加一张会让它和工作区失去对应关系，
                 // 变成一块点了没反应、又删不掉的僵尸卡。这里直接拒绝并给出正确工具。
                 if (type === 'block_define') {
                     return {success: false, error: 'block_define 是积木定义卡片，请用 addBlock 新增积木，不要直接放到画布上'};
+                }
+                // 模糊匹配：AI 写出的类型名常混用大小写（motion_movesteps vs
+                // motion_moveSteps）。B.Blocks 里大小写注册不一致 —— 有的两种
+                // 都有，有的只有驼峰版 —— 精确匹配失败时按「小写 → 原样」
+                // 顺序做一次规范化重试，避免静默失败。
+                if (!(B.Blocks && B.Blocks[type])) {
+                    const candidates = [
+                        type.toLowerCase(),
+                        type.replace(/[-_\s]+([a-z])/g, (m0, c) => c.toUpperCase()) // snake/case → camelCase
+                    ];
+                    const hit = candidates.find(c => c !== type && B.Blocks && B.Blocks[c]);
+                    if (hit) type = hit;
+                    else return {success: false, error: '未知积木类型：' + type + '（先用 listToolboxBlocks 查可用类型）'};
                 }
 
                 let blk = null;

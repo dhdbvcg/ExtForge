@@ -33,6 +33,10 @@ npm-*
 # 插件仓库（独立 git，已推 GitHub dhdbvcg/ExtForge-addons）
 /outputs
 
+# Cloudflare Pages 部署包（由 tmp-cf-build.mjs 组装，含 240MB voice 模型，
+# 是纯发布产物；用 wrangler pages deploy cf-deploy 上传，不进版本库）
+/cf-deploy
+
 # 保留桌面打包配置（手写的，非生成产物；排除生成的 bundle/安装包）
 !/build/
 /build/*

@@ -19,8 +19,17 @@ if (root.length > 0 && !root.endsWith('/')) {
     throw new Error('If ROOT is defined, it must have a trailing slash.');
 }
 
+// webpack 的 publicPath 决定**运行时按什么基准拼资源 URL**，尤其是异步
+// chunk（sb.js 就走 require.ensure）。必须用绝对路径，不能留空串：
+//   - 留空 → publicPath 变成相对路径，页面在 /editor/ 时 chunk 会被拼成
+//     /editor/js/sb.js（404，表现为「scratch-blocks is not loaded yet」）；
+//   - devServer 页面也在 /editor/ 下，同一个坑。
+// 编辑器页面此前一直在站点根，相对路径碰巧是对的；下沉一层后就暴露了。
+const publicPath = root || '/';
+
 const htmlWebpackPluginCommon = {
-    root: root,
+    // 模板里用它拼 favicon / manifest / service worker 的注册路径，同样要绝对路径
+    root: publicPath,
     meta: JSON.parse(process.env.EXTRA_META || '{}'),
     APP_NAME
 };
@@ -383,7 +392,7 @@ const base = {
         chunkFilename: (
             process.env.NODE_ENV === 'production' ? `js/${CACHE_EPOCH}/[name].[contenthash].js` : 'js/[name].js'
         ),
-        publicPath: root
+        publicPath: publicPath
     },
     resolve: {
         symlinks: false

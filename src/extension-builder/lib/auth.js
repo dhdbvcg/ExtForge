@@ -658,13 +658,14 @@ const GITHUB_DEVICE_VERIFY = 'https://github.com/login/device';
 
 /**
  * 第一步：向 GitHub 申请设备码与用户码。
+ * @param {string} [scope] 自定义授权范围；不传则用登录所需的最小集 user:email
  * @returns {Promise<{deviceCode, userCode, verificationUri, expiresIn, interval}>}
  */
-export function startGitHubDeviceFlow() {
+export function startGitHubDeviceFlow(scope) {
     return fetch(GITHUB_DEVICE_START, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: JSON.stringify({client_id: GITHUB_CLIENT_ID, scope: GITHUB_SCOPE})
+        body: JSON.stringify({client_id: GITHUB_CLIENT_ID, scope: scope || GITHUB_SCOPE})
     }).then((r) => r.json().catch(() => ({}))).then((d) => {
         if (!d || !d.device_code) {
             const msg = (d && (d.error_description || d.error)) || 'GitHub 未返回设备码';

@@ -24,6 +24,8 @@ import {
     collectProjectState, restoreProjectState
 } from '../lib/saves.js';
 import {buildSyncUrl, parseSyncPayload, importSyncPayload} from '../lib/sync.js';
+import CommunityPanel from './CommunityPanel.jsx';
+import {FORMAT as COMMUNITY_FORMAT, parseCommunityEntry} from '../lib/community.js';
 import {
     cloudAvailable, cloudSearchUsers, cloudListRelations, cloudFollow, cloudUnfollow
 } from '../lib/cloud.js';
@@ -5026,23 +5028,72 @@ const ExtensionBuilderInner = () => {
         }
     }, [rehydrateBlockMeta]);
 
+    /**
+     * 把项目快照灌进当前工作区。存档加载、社区导入、导入文件都走这里 ——
+     * 三条路径的差别只是「快照从哪来」，还原动作完全一样，合成一处才不会
+     * 各自漏掉某个 state（比如积木定义换了但扩展名没换）。
+     */
+    const applyProjectSnapshot = useCallback((data) => {
+        const restored = restoreProjectState(data);
+        setExtInfo({...DEFAULT_EXTENSION_INFO, ...restored.extInfo});
+        setCustomBlocks(restored.customBlocks);
+        customBlockXmlRef.current = restored.workspaceXmlMap;
+        setGeneratedCode(restored.generatedCode);
+        rebuildWorkspaceFromState(restored.customBlocks, restored.workspaceXmlMap);
+    }, [rebuildWorkspaceFromState]);
+
     // 加载一个存档（恢复全部项目状态）
     const handleLoadSave = useCallback((save) => {
         if (!save || !save.data) return;
         try {
-            const restored = restoreProjectState(save.data);
-            setExtInfo({...DEFAULT_EXTENSION_INFO, ...restored.extInfo});
-            setCustomBlocks(restored.customBlocks);
-            customBlockXmlRef.current = restored.workspaceXmlMap;
-            setGeneratedCode(restored.generatedCode);
-            rebuildWorkspaceFromState(restored.customBlocks, restored.workspaceXmlMap);
+            applyProjectSnapshot(save.data);
             setUserPanelType(null);
             setSaveMsg('已加载存档：' + save.name);
             alert('已加载存档：' + save.name);
         } catch (err) {
             alert('加载存档失败：' + (err.message || err));
         }
-    }, [rebuildWorkspaceFromState]);
+    }, [applyProjectSnapshot]);
+
+    // 收集当前项目快照（社区发布用；与存档同一份数据）
+    const collectSnapshot = useCallback(() => collectProjectState({
+        extInfo,
+        customBlocks,
+        workspaceXmlMap: customBlockXmlRef.current,
+        generatedCode
+    }), [extInfo, customBlocks, generatedCode]);
+
+    // 社区「以此为基础修改」的还原入口：换 ID 避免与原作者冲突
+    const restoreFromCommunity = useCallback((data) => {
+        applyProjectSnapshot(data);
+        setUserPanelType(null);
+    }, [applyProjectSnapshot]);
+
+    /**
+     * 消费社区页传来的导入载荷。
+     * 社区页把快照放进 sessionStorage 后跳过来（不用 URL 传：快照有几十万
+     * 字符，拼进 URL 会超长还会进浏览器历史），这里读完立刻清掉，避免
+     * 用户刷新一次就被重复导入。
+     */
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        let raw = null;
+        try {
+            raw = window.sessionStorage.getItem('extforge_import');
+            if (raw) window.sessionStorage.removeItem('extforge_import');
+        } catch (e) { return; }
+        if (!raw) return;
+        let entry = null;
+        try { entry = parseCommunityEntry(raw); } catch (e) { /* ignore */ }
+        if (!entry) return;
+        applyProjectSnapshot({
+            extInfo: entry.extInfo,
+            customBlocks: entry.customBlocks,
+            workspaceXml: entry.workspaceXml,
+            generatedCode: entry.generatedCode
+        });
+        setSaveMsg('已从社区载入扩展，可直接编辑');
+    }, [applyProjectSnapshot]);
 
     // 从 JSON 文件导入存档（登录后存入当前账号）
     const handleImportSaveFile = useCallback(() => {
@@ -5828,6 +5879,12 @@ const ExtensionBuilderInner = () => {
                                 onClick={() => setSettingsTab('shortcuts')}
                                 title="查看全部快捷键"
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></svg>快捷键</button>
+                            <button
+                                type="button"
+                                className={`ext-settings-tab ${settingsTab === 'community' ? 'active' : ''}`}
+                                onClick={() => setSettingsTab('community')}
+                                title="浏览社区扩展 / 发布我的扩展"
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b6d85" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle',marginRight:'4px'}}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>社区</button>
                         </div>
                         <div className="ext-settings-panes">
 
@@ -6068,6 +6125,16 @@ const ExtensionBuilderInner = () => {
                                     ))}
                                 </div>
                                 <p className="ext-shortcuts-hint">macOS 上 Ctrl 对应 ⌘ Command。</p>
+                            </div>
+                        )}
+
+                        {/* ===== 社区标签页 ===== */}
+                        {settingsTab === 'community' && (
+                            <div className="ext-settings-tab-content" style={{display: 'flex', padding: 0, overflow: 'hidden'}}>
+                                <CommunityPanel
+                                    collectSnapshot={collectSnapshot}
+                                    restoreSnapshot={restoreFromCommunity}
+                                />
                             </div>
                         )}
 

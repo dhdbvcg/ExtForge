@@ -47,7 +47,7 @@ import '../styles/extension-builder.css';
  * 而本地 localhost 开发时因为部署在根路径，完全看不出问题。
  *
  * ROOT 由 webpack DefinePlugin 在构建时注入（见 webpack.config.js），
- * 本地开发时为空串，线上构建时是 '/scratch-extension-editor/'。
+ * 本地开发时为空串，线上构建时是 '/ExtForge/'（随仓库名而定）。
  */
 function blocklyMediaPath() {
     var root = (typeof process !== 'undefined' && process.env && process.env.ROOT) || '/';
@@ -498,7 +498,7 @@ const ExtensionBuilderInner = () => {
     const [marketError, setMarketError] = useState('');
     const [marketInstalled, setMarketInstalled] = useState({}); // { dir: true }
     const [marketInstalling, setMarketInstalling] = useState(''); // 正在安装的 dir
-    const MARKET_TOPIC = 'scratch-extension-editot-addon'; // 插件市场主题（github.com/topics/...）
+    const MARKET_TOPIC = 'extforge-addon'; // 插件市场主题标签（github.com/topics/...）
     const extAddonsCleanupRef = useRef(null);
 
     // 个人主页

@@ -729,7 +729,7 @@ export async function fetchAddonTopicRepos(topic) {
 export async function fetchAddonMarketFromTopic(topic) {
     console.log('[ExtAddons] fetchAddonMarketFromTopic START, topic=', topic);
     const MARKET_OWNER = 'dhdbvcg';
-    const MARKET_REPO = 'scratch-ext-addon';
+    const MARKET_REPO = 'ExtForge-addons';
 
     /**
      * 三条取数路径，按「实时性 + 可靠性」排序，逐条尝试。

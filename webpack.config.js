@@ -495,10 +495,15 @@ module.exports = [
                 'process.env.ROUTING_STYLE': JSON.stringify(process.env.ROUTING_STYLE || 'filehash'),
                 'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
             }),
+            // 站点结构：/ 是产品主页（static/home.html），/editor/ 是编辑器本体。
+            // 所以编辑器这一整套产物整体下沉一层到 editor/，把根目录的 index.html
+            // 让给主页。publicPath 仍用 root（站点绝对前缀）—— 编辑器页面在
+            // /editor/index.html，但它请求的 js/static 资源要按站点根算，
+            // 不能多带一层 editor/。
             new HtmlWebpackPlugin({
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
-                filename: 'index.html',
+                filename: 'editor/index.html',
                 title: 'ExtForge',
                 isEditor: true,
                 hash: true,
@@ -506,9 +511,17 @@ module.exports = [
             }),
             new CopyWebpackPlugin({
                 patterns: [
+                    // 主页升格为站点根 index.html
+                    {
+                        from: 'static/home.html',
+                        to: 'index.html',
+                        force: true
+                    },
                     {
                         from: 'static',
-                        to: ''
+                        to: '',
+                        // home.html 已经升格成根 index.html，别在根下再留一份
+                        globOptions: {ignore: ['**/home.html']}
                     }
                 ]
             }),

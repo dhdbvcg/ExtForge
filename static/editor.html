@@ -2,10 +2,16 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="0; url=./" />
   <title>ExtForge</title>
-  <script>window.location.replace('/');</script>
+  <script>
+    // 兼容早期把编辑器挂在根路径的旧链接：/editor.html → 新编辑器 /editor/
+    // （站点根现在是产品主页，不能再默认跳根）
+    window.location.replace('./editor/');
+  </script>
 </head>
 <body>
-  <p>正在跳转到编辑器…如果未自动跳转，请访问 <a href="/">/</a></p>
+  <p>正在前往编辑器…如果未自动跳转，请访问 <a href="./editor/">/editor/</a></p>
 </body>
 </html>

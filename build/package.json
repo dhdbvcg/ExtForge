@@ -1,7 +1,7 @@
 {
-  "name": "scratch-extension-editor",
+  "name": "extforge",
   "version": "0.2.13671891",
-  "description": "scratch扩展编辑器",
+  "description": "ExtForge —— 像做 Scratch 项目一样做 Scratch 扩展",
   "main": "main.js",
   "author": "dhdbvcg",
   "license": "GPL-3.0",
@@ -11,8 +11,8 @@
     "build:dir": "electron-builder --win --dir"
   },
   "build": {
-    "appId": "com.scratchextensioneditor.editor",
-    "productName": "scratch-extension-editor",
+    "appId": "cc.cd.extforge.editor",
+    "productName": "ExtForge",
     "directories": {
       "output": "dist"
     },

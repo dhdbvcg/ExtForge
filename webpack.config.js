@@ -12,7 +12,7 @@ const postcssVars = require('postcss-simple-vars');
 const postcssImport = require('postcss-import');
 
 const STATIC_PATH = process.env.STATIC_PATH || '/static';
-const APP_NAME = 'Scratch扩展编辑器';
+const APP_NAME = 'ExtForge';
 
 const root = process.env.ROOT || '';
 if (root.length > 0 && !root.endsWith('/')) {
@@ -44,21 +44,14 @@ const base = {
             const MAX_PCM_BYTES = 32 * 1024 * 1024; // ≈ 16 分钟 @16kHz Int16
 
             // ── 编辑器插件：数据目录与 Node 侧运行时 ──
-            // 编辑器的数据文件夹 = Electron userData（productName = scratch-extension-editor）。
+            // 编辑器的数据文件夹 = Electron userData（productName = ExtForge）。
             // 浏览器读不了本地文件夹，所以由 Node 侧扫描后喂给页面；
             // 「终端安装 → 重开编辑器就出现」这条链路全靠这里。
-            const EDITOR_DATA_DIR = (function () {
-                if (process.env.SCRATCH_EDITOR_DATA_DIR) return process.env.SCRATCH_EDITOR_DATA_DIR;
-                const os = require('os');
-                const home = os.homedir();
-                if (process.platform === 'win32') {
-                    return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'scratch-extension-editor');
-                }
-                if (process.platform === 'darwin') {
-                    return path.join(home, 'Library', 'Application Support', 'scratch-extension-editor');
-                }
-                return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'scratch-extension-editor');
-            })();
+            // 目录名与迁移逻辑见 editor-data-dir.js（build/main.js 也用同一份，
+            // 两边算出来的路径必须一致，否则网页版和桌面版会读不同的目录）。
+            const dataDir = require('./editor-data-dir');
+            dataDir.migrateLegacyData((m) => console.log(m));
+            const EDITOR_DATA_DIR = process.env.SCRATCH_EDITOR_DATA_DIR || dataDir.currentDir();
             const PLUGINS_DIR = path.join(EDITOR_DATA_DIR, 'plugins');
             const pluginRuntime = require('./ext-plugin-runtime')({
                 pluginsDir: PLUGINS_DIR,
@@ -506,7 +499,7 @@ module.exports = [
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'index.html',
-                title: 'scratch扩展编辑器',
+                title: 'ExtForge',
                 isEditor: true,
                 hash: true,
                 ...htmlWebpackPluginCommon

@@ -14,7 +14,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Modified: TurboWarp editor has been replaced with the Scratch Extension Editor.
+// Modified: TurboWarp editor has been replaced with the ExtForge.
 // The standard Scratch GUI (Blockly workspace, sprite/stage area, etc.)
 // has been removed. This page now directly renders the Blockly-based
 // extension editor.

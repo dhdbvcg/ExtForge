@@ -1,5 +1,5 @@
 /**
- * workbuddy-bridge —— Scratch 扩展编辑器的 WorkBuddy 模型桥
+ * workbuddy-bridge —— ExtForge的 WorkBuddy 模型桥
  * ================================================================
  *
  * 作用：把本机 WorkBuddy 桌面端登录态（CodeBuddyExtension auth 文件）

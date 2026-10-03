@@ -233,11 +233,16 @@ async function createWindow() {
 function ensureDesktopShortcut() {
   const { shell } = require('electron');
   const desktopPath = app.getPath('desktop');
-  const shortcutPath = path.join(desktopPath, 'scratch-extension-editor.lnk');
+  // 2026-10 改名：ExtForge.lnk → ExtForge.lnk。
+  // 旧快捷方式指向的还是老 exe 路径，留着会让用户点到起不来的图标，
+  // 找到就删掉。
+  const legacy = path.join(desktopPath, 'ExtForge.lnk');
+  if (fs.existsSync(legacy)) { try { fs.unlinkSync(legacy); } catch (e) { /* 删不掉就算了 */ } }
+  const shortcutPath = path.join(desktopPath, 'ExtForge.lnk');
   if (!fs.existsSync(shortcutPath)) {
     try {
       shell.writeShortcutLink(shortcutPath, 'target', [
-        path.join(process.resourcesPath, 'app', 'scratch-extension-editor.exe')
+        path.join(process.resourcesPath, 'app', 'ExtForge.exe')
       ].join(''));
     } catch (e) {
       // 静默失败，不影响主功能

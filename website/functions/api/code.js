@@ -14,7 +14,7 @@
  *   - 环境变量 TURNSTILE_SECRET（可选，缺省用内置配对 secret）
  */
 
-var FROM = 'Scratch 扩展编辑器 <noreply@scratchextensioneditor.cc.cd>';
+var FROM = 'ExtForge <noreply@scratchextensioneditor.cc.cd>';
 var CODE_TTL = 600;      // 验证码有效期（秒）
 var RATE_TTL = 60;       // 重发间隔（秒）
 var MAX_ATTEMPTS = 5;    // 最多错误次数
@@ -91,7 +91,7 @@ async function sendMail(env, to, subject, html, text) {
 function mailHtml(code, purpose) {
     var title = purpose === 'reset' ? '重置密码' : '注册账号';
     return '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'PingFang SC\',\'Microsoft YaHei\',sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0c0c1a;border-radius:16px;color:#eef0fb">' +
-        '<h2 style="margin:0 0 8px;font-size:20px">Scratch 扩展编辑器</h2>' +
+        '<h2 style="margin:0 0 8px;font-size:20px">ExtForge</h2>' +
         '<p style="color:#a6a8c4;font-size:14px;margin:0 0 24px">' + title + '验证码</p>' +
         '<div style="background:linear-gradient(115deg,#8b5cf6,#22d3ee);border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">' +
         '<div style="font-size:32px;font-weight:800;letter-spacing:8px;color:#fff">' + code + '</div></div>' +
@@ -125,7 +125,7 @@ async function handleSend(body, env, request) {
 
     // 3) 生成验证码 → 先发信
     var code = randomCode();
-    var subject = purpose === 'reset' ? '【Scratch 扩展编辑器】重置密码验证码' : '【Scratch 扩展编辑器】注册验证码';
+    var subject = purpose === 'reset' ? '【ExtForge】重置密码验证码' : '【ExtForge】注册验证码';
     var sent = await sendMail(env, email, subject, mailHtml(code, purpose), mailText(code));
     if (!sent.ok) return json({ success: false, error: sent.error }, 502);
 

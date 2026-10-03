@@ -719,7 +719,7 @@ export default {
             const { modules, req } = makeRuntime();
 
             // 0) 运行时补丁：把原版的「Gandi IDE / Scratch 项目」语境改造成
-            //    「Scratch 扩展编辑器」语境（系统提示词 / 工具集 / 工具派发 / 配置同步）。
+            //    「ExtForge」语境（系统提示词 / 工具集 / 工具派发 / 配置同步）。
             //    在 eval 之前做精确字符串替换，bundle 文件本身保持原样搬运。
             //    同时安装扩展编辑器工具宿主：AI 调用的工具最终落到 __extEditorAI 上。
             installExtEditorToolHost();

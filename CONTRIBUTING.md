@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你愿意花时间改进 Scratch 扩展编辑器。本文说明本地怎么跑起来、代码往哪放、改动怎么提。
+感谢你愿意花时间改进 ExtForge。本文说明本地怎么跑起来、代码往哪放、改动怎么提。
 
 ## 开发环境
 
@@ -11,8 +11,8 @@
 | 操作系统 | Windows / macOS / Linux 都可以；桌面端打包目前只配了 Windows |
 
 ```bash
-git clone https://github.com/dhdbvcg/scratch-extension-editor.git
-cd scratch-extension-editor
+git clone https://github.com/dhdbvcg/ExtForge.git
+cd ExtForge
 npm install
 
 # 开发服务器（默认 8601）
@@ -87,11 +87,11 @@ process.send({type: 'listening', port: server.address().port, routes: ['/your-pl
 
 编辑器会把这个前缀反向代理到你的进程，页面里直接 `fetch('/your-plugin/api/...')` 就能同源访问，不需要处理 CORS。
 
-然后把条目加进市场清单 [dhdbvcg/scratch-ext-addon](https://github.com/dhdbvcg/scratch-ext-addon) 的 `plugins.json`，指向你的仓库即可。
+然后把条目加进市场清单 [dhdbvcg/ExtForge-addons](https://github.com/dhdbvcg/ExtForge-addons) 的 `plugins.json`，指向你的仓库即可。
 
 ## 报告问题
 
-用 [Issue 模板](https://github.com/dhdbvcg/scratch-extension-editor/issues/new) 提，尽量带上：复现步骤、期望行为、实际行为、浏览器与系统版本、控制台报错原文。安全问题请走 [SECURITY.md](SECURITY.md)，不要开公开 Issue。
+用 [Issue 模板](https://github.com/dhdbvcg/ExtForge/issues/new) 提，尽量带上：复现步骤、期望行为、实际行为、浏览器与系统版本、控制台报错原文。安全问题请走 [SECURITY.md](SECURITY.md)，不要开公开 Issue。
 
 ## 许可
 

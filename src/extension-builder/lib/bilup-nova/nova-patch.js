@@ -3,7 +3,7 @@
  * ======================
  * novatheai.bundle.js 是原版 Bilup Nova 的构建产物，按「原样搬运」原则不直接改动它。
  * 本模块在 bundle 源码被 eval 之前做几处精确的字符串替换，把原版的
- * 「Gandi IDE / Scratch 项目」语境改造成「Scratch 扩展编辑器」语境：
+ * 「Gandi IDE / Scratch 项目」语境改造成「ExtForge」语境：
  *
  *  1. 系统提示词  → 扩展编辑器版（AI 知道自己在哪、能操作什么）
  *  2. 工具数组 nb → 扩展编辑器工具集（读写扩展元信息与积木定义）
@@ -25,7 +25,7 @@ const CR = String.fromCharCode(13);   // 回车
 
 /** 扩展编辑器版系统提示词（逐行给出，便于维护）。 */
 export const EXT_EDITOR_SYSTEM_PROMPT = [
-    'You are AI, an AI assistant built into the Scratch Extension Editor (scratch扩展编辑器), a visual editor for authoring TurboWarp / Scratch extensions.',
+    'You are AI, an AI assistant built into the ExtForge (ExtForge), a visual editor for authoring TurboWarp / Scratch extensions.',
     '',
     '## Where you are',
     '- The user is working inside a visual extension editor. This is NOT a Scratch project, NOT the Gandi IDE, and NOT the Bilup IDE.',
@@ -107,7 +107,7 @@ export const EXT_EDITOR_TOOLS = [
         type: 'function',
         function: {
             name: 'getEditorGuide',
-            description: '读取 Scratch 扩展编辑器的结构与写作规范：积木类型、参数规则、颜色规则、导出到 TurboWarp 的方式。开始任务前先调用一次。',
+            description: '读取 ExtForge的结构与写作规范：积木类型、参数规则、颜色规则、导出到 TurboWarp 的方式。开始任务前先调用一次。',
             parameters: {type: 'object', properties: {}}
         }
     },

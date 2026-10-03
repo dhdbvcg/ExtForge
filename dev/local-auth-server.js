@@ -44,7 +44,7 @@ const MAIL_CONFIG = {
     imapPort: Number(process.env.IMAP_PORT || 993),
     user: requireEnv('SMTP_USER'),
     pass: requireEnv('SMTP_PASS'),
-    from: process.env.SMTP_FROM || ('Scratch 扩展编辑器 <' + requireEnv('SMTP_USER') + '>')
+    from: process.env.SMTP_FROM || ('ExtForge <' + requireEnv('SMTP_USER') + '>')
 };
 
 // ============================================================
@@ -193,7 +193,7 @@ function smtpSend(to, subject, text, fromAddr) {
 
 // 验证码邮件（调用通用 smtpSend）
 function sendSmtpMail(to, code) {
-    const subject = 'Scratch 扩展编辑器 - 邮箱验证码';
+    const subject = 'ExtForge - 邮箱验证码';
     const text =
         '您好，\n\n' +
         '您的邮箱验证码是：' + code + '\n' +
@@ -205,7 +205,7 @@ function sendSmtpMail(to, code) {
 // ---- Cloudflare Mailchannels 发送 ----
 function sendMailchannelsMail(to, code) {
     return new Promise((resolve, reject) => {
-        const subject = 'Scratch 扩展编辑器 - 邮箱验证码';
+        const subject = 'ExtForge - 邮箱验证码';
         const text =
             '您好，\n\n' +
             '您的邮箱验证码是：' + code + '\n' +
@@ -215,7 +215,7 @@ function sendMailchannelsMail(to, code) {
             personalizations: [
                 { to: [{email: to}], dkim_domain: 'scratchextensioneditor.cc.cd', dkim_selector: 'mailchannels' }
             ],
-            from: {email: MAILCHANNELS_FROM, name: 'Scratch 扩展编辑器'},
+            from: {email: MAILCHANNELS_FROM, name: 'ExtForge'},
             subject: subject,
             content: [{type: 'text/plain', value: text}]
         };

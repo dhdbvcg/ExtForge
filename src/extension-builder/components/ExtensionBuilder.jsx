@@ -2221,7 +2221,7 @@ const ExtensionBuilderInner = () => {
             getEditorGuide() {
                 return {
                     success: true,
-                    editor: 'Scratch 扩展编辑器（TurboWarp 扩展可视化制作器）',
+                    editor: 'ExtForge（TurboWarp 扩展可视化制作器）',
                     output: '独立 TurboWarp 扩展源码：getInfo() + blocks[] + Scratch.extensions.register',
                     blockTypes: {
                         command: '堆叠块（按顺序执行）',

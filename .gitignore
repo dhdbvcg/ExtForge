@@ -30,7 +30,7 @@ npm-*
 # WorkBuddy 本地数据（不提交）
 /.workbuddy
 
-# 插件仓库（独立 git，已推 GitHub dhdbvcg/scratch-ext-addon）
+# 插件仓库（独立 git，已推 GitHub dhdbvcg/ExtForge-addons）
 /outputs
 
 # 保留桌面打包配置（手写的，非生成产物；排除生成的 bundle/安装包）

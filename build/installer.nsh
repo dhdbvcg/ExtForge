@@ -3,6 +3,6 @@
 
 Function CreateDesktopShortcut
   StrCmp $0 "1" 0 skip_ds
-    CreateShortCut "$DESKTOP\scratch-extension-editor.lnk" "$INSTDIR\scratch-extension-editor.exe"
+    CreateShortCut "$DESKTOP\ExtForge.lnk" "$INSTDIR\ExtForge.exe"
   skip_ds:
 FunctionEnd

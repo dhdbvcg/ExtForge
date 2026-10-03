@@ -14,7 +14,7 @@ export const LEGAL_DOCS = {
     terms: {
         title: '用户协议',
         updated: LEGAL_UPDATED,
-        intro: '欢迎使用 Scratch 扩展编辑器。本协议是你与本服务之间就使用本服务所订立的约定。请在使用前完整阅读；你开始使用（包括通过 GitHub 登录）即表示你已接受本协议全部条款。',
+        intro: '欢迎使用 ExtForge。本协议是你与本服务之间就使用本服务所订立的约定。请在使用前完整阅读；你开始使用（包括通过 GitHub 登录）即表示你已接受本协议全部条款。',
         sections: [
             {
                 h: '一、服务说明',
@@ -86,7 +86,7 @@ export const LEGAL_DOCS = {
     privacy: {
         title: '隐私政策',
         updated: LEGAL_UPDATED,
-        intro: '本政策说明 Scratch 扩展编辑器会收集哪些信息、如何使用与保存它们，以及你可以怎样管理这些信息。我们的原则是：只收集让服务正常运转所必需的最少信息。',
+        intro: '本政策说明 ExtForge会收集哪些信息、如何使用与保存它们，以及你可以怎样管理这些信息。我们的原则是：只收集让服务正常运转所必需的最少信息。',
         sections: [
             {
                 h: '一、我们收集的信息',

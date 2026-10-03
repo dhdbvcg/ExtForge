@@ -1,6 +1,6 @@
 // 快速复制积木 (block-duplicate)
 // 按住 Alt/⌥ 拖动积木直接复制一份（无需右键）。按住 Ctrl/⌘ 拖动只复制选中的单个积木（cherry pick）。
-// 安装方式见仓库 README：github:dhdbvcg/ExtForge-addons 或导入本文件。
+// 安装方式见仓库 README：github:dhdbvcg/ForgeExt-addons 或导入本文件。
 export default {
     id: 'block-duplicate',
     name: '快速复制积木',

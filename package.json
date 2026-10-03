@@ -1,7 +1,7 @@
 {
-  "name": "extforge",
+  "name": "forgeext",
   "version": "0.2.13671891",
-  "description": "可视化 ExtForge —— 像做 Scratch 项目一样做 Scratch 扩展",
+  "description": "可视化 ForgeExt —— 像做 Scratch 项目一样做 Scratch 扩展",
   "author": "dhdbvcg",
   "license": "GPL-3.0",
   "homepage": "https://github.com/dhdbvcg/ExtForge#readme",

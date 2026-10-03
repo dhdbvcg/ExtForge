@@ -30,7 +30,7 @@ npm-*
 # WorkBuddy 本地数据（不提交）
 /.workbuddy
 
-# 插件仓库（独立 git，已推 GitHub dhdbvcg/ExtForge-addons）
+# 插件仓库（独立 git，已推 GitHub dhdbvcg/ForgeExt-addons）
 /outputs
 
 # Cloudflare Pages 部署包（由 tmp-cf-build.mjs 组装，含 240MB voice 模型，

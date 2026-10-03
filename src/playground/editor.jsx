@@ -14,7 +14,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Modified entry: renders the ExtForge directly.
+// Modified entry: renders the ForgeExt directly.
 // (The original TurboWarp GUI has been removed entirely.)
 
 import React from 'react';
@@ -22,7 +22,7 @@ import React from 'react';
 import ExtensionBuilder from '../extension-builder/components/ExtensionBuilder.jsx';
 import render from './app-target';
 
-document.title = 'ExtForge';
+document.title = 'ForgeExt';
 render(<ExtensionBuilder />);
 
 // Register service worker for installable PWA (production only, avoids

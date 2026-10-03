@@ -4,9 +4,9 @@
  * 设计说明：
  * - 多数内置插件（快速复制积木 / 斑马条纹 / 方形输入框 / 数字框微调 / 孤立半透明 /
  *   更多右键菜单）已于 2026-08-22 迁移到独立仓库：
- *     https://github.com/dhdbvcg/ExtForge-addons
+ *     https://github.com/dhdbvcg/ForgeExt-addons
  *   并通过 ExtensionBuilder「设置 → 插件管理 → 安装插件」用来源
- *     github:dhdbvcg/ExtForge-addons
+ *     github:dhdbvcg/ForgeExt-addons
  *   安装（对齐 DeepSeek Harness 的 dsh plugin add 风格）。
  * - EXT_ADDONS 现在保留少量「强内置」插件（随编辑器代码打包、默认启用、不可卸载），
  *   例如 realtime-collab（多人实时协作）。它们通过顶部 import 加入 EXT_ADDONS，
@@ -729,7 +729,7 @@ export async function fetchAddonTopicRepos(topic) {
 export async function fetchAddonMarketFromTopic(topic) {
     console.log('[ExtAddons] fetchAddonMarketFromTopic START, topic=', topic);
     const MARKET_OWNER = 'dhdbvcg';
-    const MARKET_REPO = 'ExtForge-addons';
+    const MARKET_REPO = 'ForgeExt-addons';
 
     /**
      * 三条取数路径，按「实时性 + 可靠性」排序，逐条尝试。

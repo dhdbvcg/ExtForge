@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "short_name": "ExtForge",
-  "name": "ExtForge",
+  "short_name": "ForgeExt",
+  "name": "ForgeExt",
   "description": "Scratch / TurboWarp 自定义扩展积木编辑器，支持积木增删与 JS 导入导出。",
   "icons": [
     {

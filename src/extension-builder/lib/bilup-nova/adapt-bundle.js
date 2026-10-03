@@ -5,7 +5,7 @@
  *   - 系统提示词说它在 Bilup(Scratch environment)，要求它去「安装内置扩展」；
  *   - getProjectOverview / listFiles 读的是 Scratch 项目的 sprites / costumes；
  *   - installExtension 依赖 vm.extensionManager.loadExtensionURL。
- * 而本宿主是「ExtForge」——一个**制作**扩展的网页工具（自定义积木 +
+ * 而本宿主是「ForgeExt」——一个**制作**扩展的网页工具（自定义积木 +
  * 实现 + 导出），**没有 Scratch VM**。于是原版工具一调用就报
  * "Scratch VM extensionManager.loadExtensionURL is not available"。
  *
@@ -23,7 +23,7 @@
 
 // 本编辑器的系统提示词（替换 bundle 内那条英文 prompt）
 const AI_SYSTEM_PROMPT = [
-    '你是「ExtForge」（Scratch / TurboWarp 扩展编辑器）内置的 AI 助手，帮助用户**制作和修改 Scratch 扩展**。',
+    '你是「ForgeExt」（Scratch / TurboWarp 扩展编辑器）内置的 AI 助手，帮助用户**制作和修改 Scratch 扩展**。',
     '',
     '## 你在哪里（重要）',
     '你运行在一个**网页版扩展开发工具**里。用户用它把「自定义积木 + 实现代码」打包成一个 TurboWarp 扩展（.js），再导入 TurboWarp 使用。',

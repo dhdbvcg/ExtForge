@@ -1729,47 +1729,47 @@ export const CODE_GENERATORS = {
     // 运动
     motion_moveSteps: (b) => {
         const s = javascriptGenerator.valueToCode(b, 'STEPS', 0) || '10';
-        return `ExtForge.Motion.moveSteps(${s});\n`;
+        return `ForgeExt.Motion.moveSteps(${s});\n`;
     },
     motion_turnRight: (b) => {
         const d = javascriptGenerator.valueToCode(b, 'DEGREES', 0) || '15';
-        return `ExtForge.Motion.turnRight(${d});\n`;
+        return `ForgeExt.Motion.turnRight(${d});\n`;
     },
     motion_turnLeft: (b) => {
         const d = javascriptGenerator.valueToCode(b, 'DEGREES', 0) || '15';
-        return `ExtForge.Motion.turnLeft(${d});\n`;
+        return `ForgeExt.Motion.turnLeft(${d});\n`;
     },
     motion_pointInDirection: (b) => {
         const d = javascriptGenerator.valueToCode(b, 'DIRECTION', 0) || '90';
-        return `ExtForge.Motion.pointInDirection(${d});\n`;
+        return `ForgeExt.Motion.pointInDirection(${d});\n`;
     },
     motion_glideTo: (b) => {
         const s = javascriptGenerator.valueToCode(b, 'SECS', 0) || '1';
         const x = javascriptGenerator.valueToCode(b, 'X', 0) || '0';
         const y = javascriptGenerator.valueToCode(b, 'Y', 0) || '0';
-        return `ExtForge.Motion.glideTo(${s}, ${x}, ${y});\n`;
+        return `ForgeExt.Motion.glideTo(${s}, ${x}, ${y});\n`;
     },
-    motion_xPosition: () => ['ExtForge.Motion.xPosition()', 0],
-    motion_yPosition: () => ['ExtForge.Motion.yPosition()', 0],
-    motion_direction: () => ['ExtForge.Motion.direction()', 0],
+    motion_xPosition: () => ['ForgeExt.Motion.xPosition()', 0],
+    motion_yPosition: () => ['ForgeExt.Motion.yPosition()', 0],
+    motion_direction: () => ['ForgeExt.Motion.direction()', 0],
 
     // 外观
     looks_say: (b) => {
         const m = javascriptGenerator.valueToCode(b, 'MESSAGE', 0) || '""';
         const s = javascriptGenerator.valueToCode(b, 'SECS', 0) || '2';
-        return `ExtForge.Looks.say(${m}, ${s});\n`;
+        return `ForgeExt.Looks.say(${m}, ${s});\n`;
     },
     looks_think: (b) => {
         const m = javascriptGenerator.valueToCode(b, 'MESSAGE', 0) || '""';
-        return `ExtForge.Looks.think(${m});\n`;
+        return `ForgeExt.Looks.think(${m});\n`;
     },
-    looks_show: () => 'ExtForge.Looks.show();\n',
-    looks_hide: () => 'ExtForge.Looks.hide();\n',
+    looks_show: () => 'ForgeExt.Looks.show();\n',
+    looks_hide: () => 'ForgeExt.Looks.hide();\n',
     looks_changeSize: (b) => {
         const c = javascriptGenerator.valueToCode(b, 'CHANGE', 0) || '10';
-        return `ExtForge.Looks.changeSize(${c});\n`;
+        return `ForgeExt.Looks.changeSize(${c});\n`;
     },
-    looks_size: () => ['ExtForge.Looks.size()', 0],
+    looks_size: () => ['ForgeExt.Looks.size()', 0],
 
     // 网络
     net_httpGet: (b) => {
@@ -1799,24 +1799,24 @@ export const CODE_GENERATORS = {
     music_playTone: (b) => {
         const f = javascriptGenerator.valueToCode(b, 'FREQ', 0) || '440';
         const t = javascriptGenerator.valueToCode(b, 'TIME', 0) || '1';
-        return `ExtForge.Music.playTone(${f}, ${t});\n`;
+        return `ForgeExt.Music.playTone(${f}, ${t});\n`;
     },
     music_playNote: (b) => {
         const n = b.getFieldValue('NOTE');
         const b2 = javascriptGenerator.valueToCode(b, 'BEATS', 0) || '1';
-        return `ExtForge.Music.playNote("${n}", ${b2});\n`;
+        return `ForgeExt.Music.playNote("${n}", ${b2});\n`;
     },
     music_rest: (b) => {
         const b2 = javascriptGenerator.valueToCode(b, 'BEATS', 0) || '1';
-        return `ExtForge.Music.rest(${b2});\n`;
+        return `ForgeExt.Music.rest(${b2});\n`;
     },
     music_setVolume: (b) => {
         const v = javascriptGenerator.valueToCode(b, 'VOLUME', 0) || '50';
-        return `ExtForge.Music.setVolume(${v});\n`;
+        return `ForgeExt.Music.setVolume(${v});\n`;
     },
     music_setTempo: (b) => {
         const t = javascriptGenerator.valueToCode(b, 'TEMPO', 0) || '120';
-        return `ExtForge.Music.setTempo(${t});\n`;
+        return `ForgeExt.Music.setTempo(${t});\n`;
     },
 
     // 脚本

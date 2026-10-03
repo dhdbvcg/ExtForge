@@ -1,7 +1,7 @@
 {
-  "name": "extforge",
+  "name": "forgeext",
   "version": "0.2.13671891",
-  "description": "ExtForge —— 像做 Scratch 项目一样做 Scratch 扩展",
+  "description": "ForgeExt —— 像做 Scratch 项目一样做 Scratch 扩展",
   "main": "main.js",
   "author": "dhdbvcg",
   "license": "GPL-3.0",
@@ -11,8 +11,9 @@
     "build:dir": "electron-builder --win --dir"
   },
   "build": {
+    "//appId": "品牌已从 ExtForge 改名为 ForgeExt，但 appId 保持 cc.cd.extforge.editor 不变 —— 它是应用的持久身份（Windows 注册表项 / 卸载记录 / 开始菜单目录都按它认），改了等于发布一个全新应用，用户会看到「重新安装」且旧数据关联不上。productName 只影响显示名与 userData 目录名。",
     "appId": "cc.cd.extforge.editor",
-    "productName": "ExtForge",
+    "productName": "ForgeExt",
     "directories": {
       "output": "dist"
     },

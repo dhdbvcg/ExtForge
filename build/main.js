@@ -180,8 +180,21 @@ function createServer() {
 async function createWindow() {
   await app.whenReady();
 
+  // ── 数据目录迁移（品牌改过两次）──
+  // app.getPath('userData') 由 productName 决定（现在是 %APPDATA%\ForgeExt），
+  // 改名后旧的 ExtForge / scratch-extension-editor 目录会「失联」——
+  // 里面装着用户装的插件、AI 助手配置、登录态。启动时先搬过来。
+  // 迁移逻辑与 devServer 侧共用 ../editor-data-dir.js，保证两边算出的
+  // 目标目录是同一个，不会网页版和桌面版各读各的。
+  try {
+    const dataDir = require('../editor-data-dir');
+    dataDir.migrateLegacyData((m) => console.log(m));
+  } catch (e) {
+    console.warn('[data] 迁移跳过:', (e && e.message) || e);
+  }
+
   // ── 编辑器插件运行时 ──
-  // 插件装在 userData/plugins/（= %APPDATA%\scratch-extension-editor\plugins，
+  // 插件装在 userData/plugins/（= %APPDATA%\ForgeExt\plugins，
   // 与 devServer 侧算出来的路径一致）。带 server.mjs / server.js 的插件会被
   // fork 成独立子进程，它回报的端口由 pluginRuntime 记成一张路由表，
   // 上面的 HTTP server 据此把请求反代过去。
@@ -233,16 +246,18 @@ async function createWindow() {
 function ensureDesktopShortcut() {
   const { shell } = require('electron');
   const desktopPath = app.getPath('desktop');
-  // 2026-10 改名：ExtForge.lnk → ExtForge.lnk。
-  // 旧快捷方式指向的还是老 exe 路径，留着会让用户点到起不来的图标，
-  // 找到就删掉。
-  const legacy = path.join(desktopPath, 'ExtForge.lnk');
-  if (fs.existsSync(legacy)) { try { fs.unlinkSync(legacy); } catch (e) { /* 删不掉就算了 */ } }
-  const shortcutPath = path.join(desktopPath, 'ExtForge.lnk');
+  // 品牌改过两次，快捷方式也换过两个名。旧快捷方式指向的还是老 exe
+  // 路径，留着会让用户点到起不来的图标 —— 逐个找到就删。
+  const LEGACY_SHORTCUTS = ['ExtForge.lnk', 'scratch-extension-editor.lnk'];
+  for (const name of LEGACY_SHORTCUTS) {
+    const p = path.join(desktopPath, name);
+    if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch (e) { /* 删不掉就算了 */ } }
+  }
+  const shortcutPath = path.join(desktopPath, 'ForgeExt.lnk');
   if (!fs.existsSync(shortcutPath)) {
     try {
       shell.writeShortcutLink(shortcutPath, 'target', [
-        path.join(process.resourcesPath, 'app', 'ExtForge.exe')
+        path.join(process.resourcesPath, 'app', 'ForgeExt.exe')
       ].join(''));
     } catch (e) {
       // 静默失败，不影响主功能

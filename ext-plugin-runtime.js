@@ -94,7 +94,7 @@ async function fetchGithubDir(owner, repo, dir, log) {
         return new Promise((resolve, reject) => {
             const req = https.get(url, {
                 headers: {
-                    'user-agent': 'ExtForge',
+                    'user-agent': 'ForgeExt',
                     accept: 'application/vnd.github+json'
                 },
                 rejectUnauthorized: !relaxed

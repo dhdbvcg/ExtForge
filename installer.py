@@ -32,8 +32,8 @@ from pathlib import Path
 # ==================================================================
 CONFIG = {
     # ---- 软件身份 ----
-    "APP_NAME": "ExtForge",          # 中文显示名
-    "APP_NAME_EN": "ExtForge",  # 英文标识（目录/文件名）
+    "APP_NAME": "ForgeExt",          # 中文显示名
+    "APP_NAME_EN": "ForgeExt",  # 英文标识（目录/文件名）
     "SUBTITLE": "Bilup 编辑器",                 # 品牌副标题
     "VERSION": "0.3.0",                         # 版本号
     "PUBLISHER": "dhdbvcg",                     # 发布者
@@ -41,11 +41,11 @@ CONFIG = {
     "WEBSITE": "https://dhdbvcg.cc.cd",         # 官网
 
     # ---- 程序文件 ----
-    "MAIN_EXE": "ExtForge.exe",
+    "MAIN_EXE": "ForgeExt.exe",
     "SOURCE_DIR": r"build\dist\win-unpacked",   # 0.3 程序文件源目录
 
     # ---- 安装目标 ----
-    "INSTALL_DIR_NAME": "ExtForge",  # 安装子目录名
+    "INSTALL_DIR_NAME": "ForgeExt",  # 安装子目录名
     # 安装到 %LOCALAPPDATA% 下（免管理员权限）
 
     # ---- 颜色主题（鼠大侠绿）----

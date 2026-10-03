@@ -12,7 +12,7 @@ const postcssVars = require('postcss-simple-vars');
 const postcssImport = require('postcss-import');
 
 const STATIC_PATH = process.env.STATIC_PATH || '/static';
-const APP_NAME = 'ExtForge';
+const APP_NAME = 'ForgeExt';
 
 const root = process.env.ROOT || '';
 if (root.length > 0 && !root.endsWith('/')) {
@@ -53,7 +53,7 @@ const base = {
             const MAX_PCM_BYTES = 32 * 1024 * 1024; // ≈ 16 分钟 @16kHz Int16
 
             // ── 编辑器插件：数据目录与 Node 侧运行时 ──
-            // 编辑器的数据文件夹 = Electron userData（productName = ExtForge）。
+            // 编辑器的数据文件夹 = Electron userData（productName = ForgeExt）。
             // 浏览器读不了本地文件夹，所以由 Node 侧扫描后喂给页面；
             // 「终端安装 → 重开编辑器就出现」这条链路全靠这里。
             // 目录名与迁移逻辑见 editor-data-dir.js（build/main.js 也用同一份，
@@ -513,7 +513,7 @@ module.exports = [
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'editor/index.html',
-                title: 'ExtForge',
+                title: 'ForgeExt',
                 isEditor: true,
                 hash: true,
                 ...htmlWebpackPluginCommon

@@ -19,13 +19,24 @@
  * generatedCode 仍然一并带上 —— 源码本身也是社区要展示的东西。
  *
  * ── Gist 的取名约定 ──
- * description 里写固定的标记前缀 `extforge-community` + 扩展名，
- * 列表接口按这个前缀过滤，避免把用户其它 Gist 也当成社区扩展。
+ * description 里写固定的标记前缀 + 扩展名，列表接口按这个前缀过滤，
+ * 避免把用户其它 Gist 也当成社区扩展。
+ *
+ * ── 关于 2026-10 的改名（ExtForge → ForgeExt）──
+ * 标记字符串**故意保持 'extforge-community' 不变**。它是数据协议标识，
+ * 不是显示名：改名会让已发布到 Gist / 云端的社区扩展、别人浏览器里
+ * 已缓存的列表、以及 localStorage 里存的导入载荷全部认不出来。
+ * 显示名改，显示标识不改 —— 新版写入的用新名，读取端两种都认
+ *（见 parseDescription / parseCommunityEntry 的兼容分支）。
  */
 
-/** Gist description 里的标记前缀（列表时按它过滤） */
+/** 写入用：Gist description 里的标记前缀 */
 const TAG = 'extforge-community';
-/** 快照格式标识 + 版本 */
+/** 读取时兼容的历史标记（早期拼写 / 可能的其它变体） */
+const LEGACY_TAGS = ['extforge-community', 'forgeext-community', 'extforge_community'];
+/** 读取端要认的全部标记（新 + 旧） */
+const ALL_TAGS = [TAG].concat(LEGACY_TAGS);
+/** 快照格式标识 + 版本（对外发布用 TAG，避免同时认两种格式导致重复） */
 export const FORMAT = 'extforge-community';
 export const SNAPSHOT_VERSION = 1;
 
@@ -60,8 +71,10 @@ function makeDescription(ext) {
 /** 从 Gist description 里认领：是不是社区扩展，顺带取出作者填的名字/描述 */
 export function parseDescription(desc) {
     const s = String(desc || '');
-    if (s.indexOf(TAG) !== 0) return null;
-    const rest = s.slice(TAG.length).replace(/^\s*·\s*/, '');
+    // 兼容历史标记（改名后仍要认得旧 Gist）
+    const tag = ALL_TAGS.find(t => s.indexOf(t) === 0);
+    if (!tag) return null;
+    const rest = s.slice(tag.length).replace(/^\s*·\s*/, '');
     const parts = rest.split('·').map(x => x.trim()).filter(Boolean);
     return {name: parts[0] || '未命名扩展', description: parts.slice(1).join(' · ')};
 }
@@ -85,11 +98,11 @@ export function buildCommunityEntry(snapshot, meta) {
     };
 }
 
-/** 校验一份文本是不是合法的社区快照 */
+/** 校验一份文本是不是合法的社区快照（兼容历史 format 值） */
 export function parseCommunityEntry(text) {
     let obj;
     try { obj = JSON.parse(text); } catch { return null; }
-    if (!obj || obj.format !== FORMAT) return null;
+    if (!obj || !ALL_TAGS.includes(obj.format)) return null;
     if (!obj.extInfo || typeof obj.extInfo !== 'object') return null;
     if (!Array.isArray(obj.customBlocks) || !obj.customBlocks.length) return null;
     return obj;

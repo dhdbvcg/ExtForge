@@ -14,7 +14,7 @@ import {
     javascriptGenerator
 } from '../lib/block-definitions.js';
 import {applyZhTranslations} from '../lib/scratch-blocks-zh.js';
-import {EXT_FORGE_RUNTIME, withUtilInjection} from '../lib/extforge-runtime.js';
+import {FORGEXT_RUNTIME, withUtilInjection} from '../lib/forgeext-runtime.js';
 // 登录只走 GitHub Device Flow：全程在页面内完成，不用 authorize 重定向，
 // 也就不需要 buildGitHubAuthUrl / makeGitHubState。用户名/密码与邮箱验证码
 // 相关的 login / register / sendEmailCode / verifyEmailCode 同样已不再引用。
@@ -49,7 +49,7 @@ import '../styles/extension-builder.css';
  * 而本地 localhost 开发时因为部署在根路径，完全看不出问题。
  *
  * ROOT 由 webpack DefinePlugin 在构建时注入（见 webpack.config.js），
- * 本地开发时为空串，线上构建时是 '/ExtForge/'（随仓库名而定）。
+ * 本地开发时为空串，线上构建时是 '/ForgeExt/'（随仓库名而定）。
  */
 function blocklyMediaPath() {
     var root = (typeof process !== 'undefined' && process.env && process.env.ROOT) || '/';
@@ -2223,7 +2223,7 @@ const ExtensionBuilderInner = () => {
             getEditorGuide() {
                 return {
                     success: true,
-                    editor: 'ExtForge（TurboWarp 扩展可视化制作器）',
+                    editor: 'ForgeExt（TurboWarp 扩展可视化制作器）',
                     output: '独立 TurboWarp 扩展源码：getInfo() + blocks[] + Scratch.extensions.register',
                     blockTypes: {
                         command: '堆叠块（按顺序执行）',
@@ -5074,13 +5074,21 @@ const ExtensionBuilderInner = () => {
      * 社区页把快照放进 sessionStorage 后跳过来（不用 URL 传：快照有几十万
      * 字符，拼进 URL 会超长还会进浏览器历史），这里读完立刻清掉，避免
      * 用户刷新一次就被重复导入。
+     *
+     * 键名：品牌 2026-10 从 ExtForge 改成 ForgeExt，这里也换成新键；但
+     * 旧键里可能还留着跳转中断时的载荷（用户改名后没走完流程），所以
+     * 新旧两个键都读一遍，先读到即清。localStorage/sessionStorage 的键
+     * 名不是协议的一部分（只有社区页与编辑器需要一致），换掉是安全的。
      */
     useEffect(() => {
         if (typeof window === 'undefined') return;
+        const KEYS = ['forgeext_import', 'extforge_import'];
         let raw = null;
         try {
-            raw = window.sessionStorage.getItem('extforge_import');
-            if (raw) window.sessionStorage.removeItem('extforge_import');
+            for (const k of KEYS) {
+                const v = window.sessionStorage.getItem(k);
+                if (v) { raw = v; window.sessionStorage.removeItem(k); break; }
+            }
         } catch (e) { return; }
         if (!raw) return;
         let entry = null;
@@ -7211,7 +7219,7 @@ function wrapAsExtension(extInfo, generatedCode, customBlocks) {
     return `/**\n${headerLines}\n */\n\n` +
 `(function(Scratch) {\n` +
 `    'use strict';\n\n` +
-EXT_FORGE_RUNTIME.split('\n').map(l => '    ' + l).join('\n') + '\n\n' +
+FORGEXT_RUNTIME.split('\n').map(l => '    ' + l).join('\n') + '\n\n' +
 `    class ${className} {\n` +
 `        getInfo() {\n` +
 `            return {\n` +

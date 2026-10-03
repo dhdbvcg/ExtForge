@@ -1,10 +1,10 @@
-# ExtForge
+# ForgeExt
 
 **像做 Scratch 项目一样做 Scratch 扩展。**
 
 基于 [TurboWarp/scratch-gui](https://github.com/TurboWarp/scratch-gui) 深度定制的可视化扩展编辑器。在图形界面里拼积木、写代码、一键导出能在 TurboWarp 跑的扩展 —— 不需要打开编辑器源码，也不需要懂 webpack。
 
-[官网](https://scratchextensioneditor.cc.cd) · [插件市场](https://github.com/dhdbvcg/ExtForge-addons) · [问题反馈](https://github.com/dhdbvcg/ExtForge/issues)
+[官网](https://scratchextensioneditor.cc.cd) · [插件市场](https://github.com/dhdbvcg/ForgeExt-addons) · [问题反馈](https://github.com/dhdbvcg/ForgeExt/issues)
 
 ---
 
@@ -63,7 +63,7 @@ https://turbowarp.org/editor?extension=data:text/javascript;base64,<...>
 
 端口由操作系统分配（传 `0`），所以开多个编辑器实例不会撞端口。
 
-已上架的例子：**[DeepSeek 网页版](https://github.com/dhdbvcg/ExtForge-deepseek-web-panel)** —— 把 chat.deepseek.com 的网页模型接进编辑器，含登录态捕获、账号库、PoW 求解、SSE 流式与图片理解。
+已上架的例子：**[DeepSeek 网页版](https://github.com/dhdbvcg/ForgeExt-deepseek-web-panel)** —— 把 chat.deepseek.com 的网页模型接进编辑器，含登录态捕获、账号库、PoW 求解、SSE 流式与图片理解。
 
 自己写插件的完整说明见 [CONTRIBUTING.md](CONTRIBUTING.md#写一个插件)。
 
@@ -97,8 +97,8 @@ npm run build          # 出 NSIS 安装包
 
 ```bash
 # 需要 Node.js 22.x（见 .nvmrc）
-git clone https://github.com/dhdbvcg/ExtForge.git
-cd ExtForge
+git clone https://github.com/dhdbvcg/ForgeExt.git
+cd ForgeExt
 npm install
 
 npm start

@@ -4,7 +4,7 @@
 
 **请不要开公开 Issue。** 用 GitHub 的私密报告通道：
 
-<https://github.com/dhdbvcg/ExtForge/security/advisories/new>
+<https://github.com/dhdbvcg/ForgeExt/security/advisories/new>
 
 或者在 Issues 里 @dhdbvcg 请求一个私下沟通渠道。
 

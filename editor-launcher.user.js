@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         一键启动 · ExtForge
+// @name         一键启动 · ForgeExt
 // @namespace    https://scratchextensioneditor.cc.cd/
 // @version      1.5.0
-// @description  网页右下角悬浮按钮：一键启动并打开本地 ExtForge（http://127.0.0.1:8601）；编辑器已打开时自动隐藏（可切换）；可拖动、可收起、带状态灯
+// @description  网页右下角悬浮按钮：一键启动并打开本地 ForgeExt（http://127.0.0.1:8601）；编辑器已打开时自动隐藏（可切换）；可拖动、可收起、带状态灯
 // @author       dhdbvcg
 // @match        *://*/*
 // @grant        GM_getValue

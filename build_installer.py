@@ -3,7 +3,7 @@
 """
 build_installer.py
 ==================================================================
-为「ExtForge」构建 Windows 安装程序（NSIS）的 Python 脚本。
+为「ForgeExt」构建 Windows 安装程序（NSIS）的 Python 脚本。
 
 功能：
   1. 自动收集 0.3 版本所需的程序文件与依赖（electron 运行时 + 应用代码）。
@@ -34,14 +34,14 @@ from pathlib import Path
 # ==================================================================
 CONFIG = {
     # ---- 软件身份信息 ----
-    "APP_NAME": "ExtForge",          # 中文显示名（安装向导/开始菜单）
-    "APP_NAME_EN": "ExtForge",  # 英文标识（目录/快捷方式文件名，避免非 ASCII 路径）
+    "APP_NAME": "ForgeExt",          # 中文显示名（安装向导/开始菜单）
+    "APP_NAME_EN": "ForgeExt",  # 英文标识（目录/快捷方式文件名，避免非 ASCII 路径）
     "VERSION": "0.3.0",                         # 版本号标识
     "PUBLISHER": "dhdbvcg",                     # 发布者
     "APP_ID": "com.bilup.editor",               # 唯一标识（卸载注册表键名）
 
     # ---- 程序入口 ----
-    "MAIN_EXE": "ExtForge.exe", # 安装后启动的主程序文件名
+    "MAIN_EXE": "ForgeExt.exe", # 安装后启动的主程序文件名
 
     # ---- 源文件（0.3 版本已构建好的程序文件与依赖）----
     # 默认指向 electron-builder 解包产物（含完整运行时 + 应用代码）。
@@ -267,7 +267,7 @@ SectionEnd
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="构建 ExtForge Windows 安装程序"
+        description="构建 ForgeExt Windows 安装程序"
     )
     parser.add_argument("--version", help="覆盖版本号（如 0.3.1）")
     parser.add_argument("--source", help="覆盖源程序目录")

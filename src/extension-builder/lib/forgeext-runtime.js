@@ -1,18 +1,18 @@
 /**
- * ExtForge runtime — injected into every exported extension so that the
- * generated block implementations (ExtForge.Motion.moveSteps etc.) actually
+ * ForgeExt runtime — injected into every exported extension so that the
+ * generated block implementations (ForgeExt.Motion.moveSteps etc.) actually
  * work inside TurboWarp. Without this, blocks would throw
- * "ExtForge is not defined" and appear to do nothing.
+ * "ForgeExt is not defined" and appear to do nothing.
  *
  * Uses util.target (RenderedTarget) properties directly, so blocks have a
  * real visible effect in the TurboWarp project.
  */
 
-export const EXT_FORGE_RUNTIME = `
+export const FORGEXT_RUNTIME = `
 // ============================================================
-// ExtForge runtime (injected by Extension Editor)
+// ForgeExt runtime (injected by Extension Editor)
 // ============================================================
-const ExtForge = (() => {
+const ForgeExt = (() => {
     let currentUtil = null;
     const target = () => (currentUtil && currentUtil.target) || null;
 
@@ -89,10 +89,10 @@ const ExtForge = (() => {
                 } else if (typeof t.setSayBubble === 'function') {
                     try { t.setSayBubble(msg, secs || 2); } catch (e) { /* fallback */ }
                 } else {
-                    console.log('[ExtForge]', msg);
+                    console.log('[ForgeExt]', msg);
                 }
             },
-            think: (msg, secs) => ExtForge.Looks.say('(思考) ' + msg, secs),
+            think: (msg, secs) => ForgeExt.Looks.say('(思考) ' + msg, secs),
             show: () => { const t = target(); if (t) t.visible = true; },
             hide: () => { const t = target(); if (t) t.visible = false; },
             changeSize: (delta) => {
@@ -118,7 +118,7 @@ const ExtForge = (() => {
 `;
 
 /**
- * Prepends ExtForge._setUtil(util) to a generated method body so every
+ * Prepends ForgeExt._setUtil(util) to a generated method body so every
  * block implementation has a valid util context.
  */
 export function withUtilInjection(code) {
@@ -129,5 +129,5 @@ export function withUtilInjection(code) {
     // reference runtime.broadcast / runtime.ioDevices / runtime.startHats etc.
     // don't throw ReferenceError. util.runtime is a getter on BlockUtility
     // that returns the vm Runtime (EventEmitter with ioDevices/startHats/...).
-    return code.replace(/(async\s+)?(\(args,\s*util\)\s*\{)/g, '$1$2\n            ExtForge._setUtil(util);\n            const runtime = (util && util.runtime) || (util && util.target && util.target.runtime) || null;');
+    return code.replace(/(async\s+)?(\(args,\s*util\)\s*\{)/g, '$1$2\n            ForgeExt._setUtil(util);\n            const runtime = (util && util.runtime) || (util && util.target && util.target.runtime) || null;');
 }

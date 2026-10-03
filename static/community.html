@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>社区扩展 · ExtForge</title>
-<meta name="description" content="ExtForge 社区：浏览其他用户发布的 Scratch / TurboWarp 扩展，一键载入编辑器改成自己的。">
+<title>社区扩展 · ForgeExt</title>
+<meta name="description" content="ForgeExt 社区：浏览其他用户发布的 Scratch / TurboWarp 扩展，一键载入编辑器改成自己的。">
 <link rel="icon" href="favicon.ico">
 <style>
 :root {
@@ -152,7 +152,7 @@ a { color: inherit; text-decoration: none; }
             <span class="brand-mark" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
             </span>
-            ExtForge
+            ForgeExt
         </a>
         <div class="nav-links">
             <a href="./">首页</a>
@@ -172,7 +172,7 @@ a { color: inherit; text-decoration: none; }
 
 <div class="wrap">
     <div class="note">
-        社区扩展存在 GitHub Gist 上，由发布者自己的账号托管。ExtForge 不额外保存内容 ——
+        社区扩展存在 GitHub Gist 上，由发布者自己的账号托管。ForgeExt 不额外保存内容 ——
         发布者删除 Gist，条目就没了。
     </div>
 
@@ -200,7 +200,7 @@ a { color: inherit; text-decoration: none; }
 </div>
 
 <footer class="footer">
-    ExtForge · 独立第三方工具，与 Scratch 基金会无隶属关系 ·
+    ForgeExt · 独立第三方工具，与 Scratch 基金会无隶属关系 ·
     <a href="./">首页</a> · <a href="./editor/">编辑器</a>
 </footer>
 
@@ -243,8 +243,12 @@ var state = {
     token: ''         // 用户自己的 token（发布用，浏览不需要）
 };
 
-/* 社区快照的格式约定与社区模块保持一致（这里是页面内联版本） */
+/* 社区快照的格式约定与社区模块保持一致（这里是页面内联版本）。
+   注意：标记串 'extforge-community' 是数据协议标识、不是显示名 —— 品牌改名
+   （ExtForge → ForgeExt）时故意不改它，否则已发布的社区扩展与浏览器里
+   缓存的列表全部失效。读取端新旧两种标记都认（见 ALL_TAGS）。 */
 var TAG = 'extforge-community';
+var ALL_TAGS = ['extforge-community', 'forgeext-community'];
 
 /* 云端优先、Gist 回退。supabase-config.js 换了项目后，这里也要换 ——
    两处是同一套凭据，页面读不到 webpack 的模块，只能内联一份。 */
@@ -285,8 +289,13 @@ var ICON = {
 
 function parseDescription(desc) {
     var s = String(desc || '');
-    if (s.indexOf(TAG) !== 0) return null;
-    var rest = s.slice(TAG.length).replace(/^\s*·\s*/, '');
+    // 兼容历史标记（品牌改名后仍要认得旧 Gist）
+    var tag = null;
+    for (var i = 0; i < ALL_TAGS.length; i++) {
+        if (s.indexOf(ALL_TAGS[i]) === 0) { tag = ALL_TAGS[i]; break; }
+    }
+    if (!tag) return null;
+    var rest = s.slice(tag.length).replace(/^\s*·\s*/, '');
     var parts = rest.split('·').map(function (x) { return x.trim(); }).filter(Boolean);
     return {name: parts[0] || '未命名扩展', description: parts.slice(1).join(' · ')};
 }
@@ -301,7 +310,7 @@ function gistToItem(g) {
     if (file && file.content) {
         try {
             var o = JSON.parse(file.content);
-            if (o && o.format === TAG) snap = o;
+            if (o && ALL_TAGS.indexOf(o.format) >= 0) snap = o;
         } catch (e) { /* 非社区 Gist 或内容被截断 */ }
     }
     return {
@@ -553,7 +562,7 @@ function renderCard(it) {
    而且会进浏览器历史。 */
 function openInEditor(it) {
     try {
-        sessionStorage.setItem('extforge_import', JSON.stringify({
+        sessionStorage.setItem('forgeext_import', JSON.stringify({
             format: TAG,
             data: {
                 extInfo: it.entry.extInfo || {},

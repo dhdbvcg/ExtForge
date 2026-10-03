@@ -22,7 +22,9 @@ import {
 import {startGitHubDeviceFlow, pollGitHubDeviceToken} from '../lib/auth';
 
 const GIST_SCOPE = 'gist';
-const TOKEN_KEY = 'extforge_gist_token';
+/* 品牌改名后换新键；旧键里可能还留着一枚有效的 gist 授权，顺手读过来，
+   省得用户重新授权一遍。写只写新键。 */
+const TOKEN_KEYS = ['forgeext_gist_token', 'extforge_gist_token'];
 
 const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -58,13 +60,25 @@ const svgIcon = (paths) => {
 let memToken = null;
 function getToken() {
     if (memToken) return memToken;
-    try { memToken = sessionStorage.getItem(TOKEN_KEY) || null; } catch (e) { /* 无痕 */ }
+    try {
+        for (const k of TOKEN_KEYS) {
+            const v = sessionStorage.getItem(k);
+            if (v) { memToken = v; break; }
+        }
+    } catch (e) { /* 无痕模式 */ }
     return memToken;
 }
 function setToken(t) {
     memToken = t;
     // sessionStorage 语义就是「关掉浏览器就没了」，比 localStorage 保守
-    try { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* 无痕 */ }
+    try {
+        if (t) {
+            sessionStorage.setItem(TOKEN_KEYS[0], t);
+            for (let i = 1; i < TOKEN_KEYS.length; i++) sessionStorage.removeItem(TOKEN_KEYS[i]);
+        } else {
+            for (const k of TOKEN_KEYS) sessionStorage.removeItem(k);
+        }
+    } catch (e) { /* 无痕模式 */ }
 }
 
 /** 走一次 Device Flow 拿 gist 权限的 token */

@@ -16,6 +16,7 @@
 import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {
     fetchCommunity, fetchGistDetail, publishToCommunity,
+    publishToCloud, cloudBackendReady,
     buildCommunityEntry, buildImportPayload
 } from '../lib/community';
 import {startGitHubDeviceFlow, pollGitHubDeviceToken} from '../lib/auth';
@@ -91,13 +92,14 @@ async function acquireGistToken() {
     }
 }
 
-export default function CommunityPanel({collectSnapshot, restoreSnapshot}) {
+export default function CommunityPanel({collectSnapshot, restoreSnapshot, session}) {
     const [tab, setTab] = useState('browse');       // browse | publish
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [msg, setMsg] = useState('');
     const [q, setQ] = useState('');
+    const [backend, setBackend] = useState(null);   // 'cloud' | 'gist'
 
     // 发布表单
     const [desc, setDesc] = useState('');
@@ -110,6 +112,8 @@ export default function CommunityPanel({collectSnapshot, restoreSnapshot}) {
         try {
             const r = await fetchCommunity({token: getToken()});
             setItems(r.items);
+            setBackend(r.backend || null);
+            if (r.notice) setError(r.notice);
         } catch (e) {
             setError(e.message || String(e));
         } finally {
@@ -162,19 +166,34 @@ export default function CommunityPanel({collectSnapshot, restoreSnapshot}) {
         try {
             const snapshot = collectSnapshot();
             const entry = buildCommunityEntry(snapshot, {description: desc});
+            const author = (session && session.username) || '';
+
+            // 优先走云端：不需要任何 GitHub 授权。
+            // 这条路径的存在意义是绕开 GitHub Pages 上 Device Flow 不可用的问题
+            // （Pages 纯静态，POST 被 SPA fallback 挡成 405）。
+            if (cloudBackendReady() && author) {
+                const r = await publishToCloud(entry, author);
+                setMsg('已发布到云端社区！打开「' + (entry.extInfo && entry.extInfo.name) +
+                    '」即可看到。');
+                setDesc('');
+                load();
+                return;
+            }
+
+            // 回退：Gist 发布（需要一次 GitHub 授权）
             const token = await acquireGistToken();
             const gist = await publishToCommunity(entry, token);
-            setMsg('已发布！社区链接：' + gist.html_url);
+            setMsg('云端未配置，已改用 GitHub Gist 发布：' + gist.html_url);
             setDesc('');
             load();
         } catch (e) {
             const msgText = e.message || String(e);
-            if (/device|授权|设备码|过期/.test(msgText)) setError(msgText);
+            if (/设备码|授权|过期/.test(msgText)) setError(msgText);
             else setError('发布失败：' + msgText);
         } finally {
             setBusy(false);
         }
-    }, [collectSnapshot, desc, load]);
+    }, [collectSnapshot, desc, load, session]);
 
     // 设备码授权界面（如果用户要 gist 权限）
     const startAuth = useCallback(async () => {
@@ -282,6 +301,10 @@ export default function CommunityPanel({collectSnapshot, restoreSnapshot}) {
             msg ? React.createElement('div', {style: {...style.msg, ...style.ok}}, msg) : null,
 
             tab === 'browse' ? React.createElement(React.Fragment, null,
+                backend ? React.createElement('p', {style: {...style.muted, marginBottom: 10}},
+                    backend === 'cloud'
+                        ? '数据来自云端（Supabase），无需登录即可浏览。'
+                        : '云端暂不可用，当前显示的是 GitHub Gist 上的扩展。') : null,
                 React.createElement('input', {
                     style: style.search, type: 'search', placeholder: '搜索社区扩展…', value: q,
                     onChange: (e) => setQ(e.target.value)
@@ -292,13 +315,19 @@ export default function CommunityPanel({collectSnapshot, restoreSnapshot}) {
             ) : React.createElement(React.Fragment, null,
                 card('发布当前扩展到社区'),
                 React.createElement('p', {style: style.muted},
-                    '会把当前项目（扩展信息 + 全部积木定义 + 画布实现）打包成一个公开 Gist。发布需要一次 GitHub 授权（含 gist 权限），授权后本标签页内复用。'),
+                    cloudBackendReady()
+                        ? '发布不需要 GitHub 授权 —— 当前走云端存储（Supabase），只需已登录以标记作者。发布后社区页立即可见，' +
+                          '其他人可一键载入你的扩展并改编成他自己的版本。'
+                        : '云端尚未配置，发布会回退到 GitHub Gist（需要一次含 gist 权限的 GitHub 授权）。' +
+                          '在 supabase-config.js 填好项目凭据即可切换到无需授权的云端发布。'),
+                !session ? React.createElement('p', {style: {...style.muted, color: '#a50e0e'}},
+                    '发布需要先登录（用于标记作者）。点击顶部「GitHub 登录」或任意本地账号登录后再来。') : null,
                 React.createElement('input', {
                     style: style.input, type: 'text', placeholder: '一句话介绍这个扩展（可选）', value: desc,
                     onChange: (e) => setDesc(e.target.value)
                 }),
                 React.createElement('button', {
-                    style: style.btn, onClick: onPublish, disabled: busy
+                    style: style.btn, onClick: onPublish, disabled: busy || !session
                 }, busy ? '发布中…' : '发布到社区'),
                 device ? React.createElement('div', {style: {...style.msg, background: '#e8f0fe', color: '#174ea6', marginTop: 14}},
                     '请在打开的 GitHub 页面确认授权。若没弹窗，请手动打开：',

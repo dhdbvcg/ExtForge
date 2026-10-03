@@ -6134,6 +6134,7 @@ const ExtensionBuilderInner = () => {
                                 <CommunityPanel
                                     collectSnapshot={collectSnapshot}
                                     restoreSnapshot={restoreFromCommunity}
+                                    session={session}
                                 />
                             </div>
                         )}

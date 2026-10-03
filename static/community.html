@@ -190,6 +190,8 @@ a { color: inherit; text-decoration: none; }
         <span class="count" id="count"></span>
     </div>
 
+    <div class="notice" id="backend-note" style="display:none"></div>
+
     <div class="grid" id="grid"></div>
 
     <div class="loadmore">
@@ -236,11 +238,21 @@ var state = {
     loading: false,
     q: '',
     sort: 'updated',
+    backend: null,    // 'cloud' | 'gist'
+    notice: '',
     token: ''         // 用户自己的 token（发布用，浏览不需要）
 };
 
 /* 社区快照的格式约定与社区模块保持一致（这里是页面内联版本） */
 var TAG = 'extforge-community';
+
+/* 云端优先、Gist 回退。supabase-config.js 换了项目后，这里也要换 ——
+   两处是同一套凭据，页面读不到 webpack 的模块，只能内联一份。 */
+var CLOUD = {
+    url: 'https://hbndheyywwinwezoekyd.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibmRoZXl5d3dpbndlem9la3lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDE0MzMsImV4cCI6MjEwMDExNzQzM30.V01oah5J16cfB0GpfCxueERo5dGczFI-OzVQCvWeoMY'
+};
+function cloudOn() { return !!(CLOUD.url && CLOUD.key); }
 
 function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -313,6 +325,54 @@ function api(path) {
     return fetch('https://api.github.com' + path, {headers: h});
 }
 
+function cloudApi(path, opts) {
+    var o = opts || {};
+    return fetch(CLOUD.url + '/rest/v1/' + path, {
+        method: o.method || 'GET',
+        headers: {
+            'apikey': CLOUD.key,
+            'Authorization': 'Bearer ' + CLOUD.key,
+            'Content-Type': 'application/json'
+        },
+        body: o.body ? JSON.stringify(o.body) : undefined
+    });
+}
+
+/* 云端行 → 统一条目结构（与编辑器侧 community.js 的 cloudToCommunity 对齐） */
+function cloudRowToItem(r) {
+    return {
+        cloudId: r.id,
+        source: 'cloud',
+        author: r.author || '',
+        name: r.name || '未命名扩展',
+        description: r.description || '',
+        views: r.views_count || 0,
+        likes: r.likes_count || 0,
+        updatedAt: r.updated_at || 0,
+        extInfo: r.ext_info || null,
+        blockCount: (r.custom_blocks || []).length,
+        code: r.generated_code || '',
+        entry: {
+            format: TAG,
+            extInfo: r.ext_info || {},
+            customBlocks: r.custom_blocks || [],
+            workspaceXml: r.workspace_xml || {},
+            generatedCode: r.generated_code || '',
+            description: r.description || ''
+        }
+    };
+}
+
+async function loadFromCloud() {
+    var res = await cloudApi('ext_community?select=*&order=updated_at.desc&limit=200');
+    if (!res.ok) {
+        var t = await res.text().catch(function () { return ''; });
+        throw new Error('云端 HTTP ' + res.status + (t ? ' ' + t.slice(0, 100) : ''));
+    }
+    var rows = await res.json();
+    return (rows || []).map(cloudRowToItem);
+}
+
 async function loadPage(reset) {
     if (state.loading) return;
     state.loading = true;
@@ -320,13 +380,30 @@ async function loadPage(reset) {
     render();
 
     try {
-        var res = await api('/gists/public?per_page=100&page=' + state.page);
-        if (!res.ok) throw new Error('HTTP ' + res.status + '（GitHub 限流时可稍后重试）');
-        var list = await res.json();
-        if (!Array.isArray(list)) throw new Error('返回格式异常');
-        state.raw = state.raw.concat(list.map(gistToItem).filter(Boolean));
-        state.hasMore = list.length >= 100;
-        if (state.hasMore) state.page += 1;
+        var items = null;
+        if (cloudOn()) {
+            try {
+                items = await loadFromCloud();
+                state.backend = 'cloud';
+            } catch (e) {
+                // 云端不可用 → 回退 Gist，功能不至于整个不可用
+                state.backend = 'gist';
+                state.notice = '云端暂不可用（' + e.message + '），已回退到 GitHub Gist';
+            }
+        }
+        if (!items) {
+            var res = await api('/gists/public?per_page=100&page=' + state.page);
+            if (!res.ok) throw new Error('HTTP ' + res.status + '（GitHub 限流时可稍后重试）');
+            var list = await res.json();
+            if (!Array.isArray(list)) throw new Error('返回格式异常');
+            items = list.map(gistToItem).filter(Boolean);
+            if (state.backend !== 'gist') state.backend = 'gist';
+            state.hasMore = list.length >= 100;
+            if (state.hasMore) state.page += 1;
+        } else {
+            state.hasMore = false;
+        }
+        state.raw = state.raw.concat(items);
         applyFilter();
         clearError();
     } catch (e) {
@@ -353,6 +430,18 @@ function applyFilter() {
     state.items = items;
     document.getElementById('count').textContent =
         items.length + ' 个扩展' + (state.raw.length > items.length ? '（已按关键词筛选，共拉取 ' + state.raw.length + '）' : '');
+
+    // 后端来源提示：云端 vs Gist 回退要说清楚（用户要能知道数据存在哪）
+    var note = document.getElementById('backend-note');
+    if (state.backend === 'gist' && cloudOn()) {
+        note.textContent = state.notice || '云端暂不可用，当前显示的是 GitHub Gist 上的扩展。';
+        note.style.display = '';
+    } else if (state.backend === 'cloud') {
+        note.textContent = '数据来自云端，无需登录即可浏览。发布请在编辑器内「设置 → 社区」。';
+        note.style.display = '';
+    } else {
+        note.style.display = 'none';
+    }
 }
 
 function showError(msg) {
@@ -426,6 +515,8 @@ function renderCard(it) {
         chips.appendChild(chip);
     }
     if (it.blockCount != null) chips.appendChild(el('span', 'chip', it.blockCount + ' 个积木'));
+    if (it.views) chips.appendChild(el('span', 'chip', '👁 ' + it.views));
+    if (it.likes) chips.appendChild(el('span', 'chip', '♥ ' + it.likes));
     chips.appendChild(el('span', 'chip', 'MPL-2.0'));
     if (chips.children.length) c.appendChild(chips);
 
@@ -435,7 +526,13 @@ function renderCard(it) {
     var useBtn = el('button', 'btn btn-primary');
     useBtn.appendChild(icon(ICON.use));
     useBtn.appendChild(el('span', null, '以此为基础修改'));
-    useBtn.onclick = function () { openInEditor(it); };
+    useBtn.onclick = function () {
+        // 浏览量统计（云端条目才有意义；Gist 侧略过），静默不阻塞跳转
+        if (it.source === 'cloud' && it.cloudId && cloudOn()) {
+            cloudApi('rpc/bump_community_views', {method: 'POST', body: {id: it.cloudId}}).catch(function () {});
+        }
+        openInEditor(it);
+    };
     if (!it.entry) {
         useBtn.disabled = true;
         useBtn.title = '这个 Gist 的内容被 GitHub 截断了，稍后重试或点「查看源码」';

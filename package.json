@@ -4,13 +4,13 @@
   "description": "可视化 ForgeExt —— 像做 Scratch 项目一样做 Scratch 扩展",
   "author": "dhdbvcg",
   "license": "GPL-3.0",
-  "homepage": "https://github.com/dhdbvcg/ExtForge#readme",
+  "homepage": "https://github.com/dhdbvcg/ForgeExt#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dhdbvcg/ExtForge.git"
+    "url": "https://github.com/dhdbvcg/ForgeExt.git"
   },
   "bugs": {
-    "url": "https://github.com/dhdbvcg/ExtForge/issues"
+    "url": "https://github.com/dhdbvcg/ForgeExt/issues"
   },
   "main": "./build/js/editor.js",
   "scripts": {

@@ -1,4 +1,78 @@
 /* ============================================================
+   ForgeExt — 设计变量（Design Tokens）
+   ============================================================
+   为什么先做这一层：改版前全文件是 51 处硬编码品牌色、138 处
+   border-radius、23 处 box-shadow，各写各的、没有共同尺度 —— 这正是
+   界面「发灰、处处是卡片、没有层级」的根源。这里定一套变量，后面
+   逐块替换引用它，改一处即全局生效。
+
+   取向：开发工具风（GitHub / Linear 那一类）—— 中性灰底、蓝色强调、
+   1px 边框为主、几乎不用阴影、靠字重与留白建立层级。
+   ============================================================ */
+
+:root {
+    /* ---- 强调色 ----
+       从高饱和品牌红改为克制的靛蓝：工具类界面里，红色大面积铺开
+       会让「危险 / 错误 / 主操作」三件事混在一起分不清。 */
+    --fx-accent: #3b5bdb;
+    --fx-accent-hover: #364fc7;
+    --fx-accent-active: #2f449f;
+    --fx-accent-subtle: #edf0ff;
+    --fx-accent-border: #c3cbf7;
+
+    /* ---- 中性色阶（灰）----
+       对比度按 WCAG：正文 #1f2329 on var(--fx-bg) ≈ 14:1，次要 #5b6169 ≈ 6.4:1，
+       三级 #8b9199 ≈ 3.6:1（仅用于大号非关键文字）。改版前满屏的
+       #666/#999 在白底上只有 3:1 出头，远看就是「灰蒙蒙」。 */
+    --fx-text: #1f2329;          /* 标题、正文、积木文字 */
+    --fx-text-2: #5b6169;        /* 次要说明、标签 */
+    --fx-text-3: #8b9199;        /* 占位符、禁用态 */
+    --fx-text-inv: var(--fx-bg);
+
+    /* ---- 背景 ---- */
+    --fx-bg: var(--fx-bg);
+    --fx-bg-subtle: #f7f8fa;    /* 侧栏、工具区底 */
+    --fx-bg-muted: #f0f1f4;     /* hover 底、输入框底 */
+    --fx-bg-inset: #eef0f3;      /* 代码区等「下沉」区域 */
+
+    /* ---- 边框 ----
+       1px 实线为主，是这套风格的主要分隔手段（不是阴影）。 */
+    --fx-border: #d8dbe0;
+    --fx-border-strong: #bcc1c8;
+    --fx-border-subtle: #e8eaee;
+
+    /* ---- 圆角 ----
+       收敛成三档。改版前几乎每个容器都是 10~12px，界面被切成
+       一堆「卡片」，主次反而看不出来。 */
+    --fx-radius-sm: 3px;         /* 按钮、输入框、标签 */
+    --fx-radius: 5px;            /* 面板、弹层 */
+    --fx-radius-lg: 8px;         /* 悬浮窗（少数） */
+
+    /* ---- 阴影 ----
+       只在真正需要「浮起来」的地方用（悬浮窗、下拉），普通容器
+       一律用边框而非阴影。 */
+    --fx-shadow-sm: 0 1px 2px rgba(31, 35, 41, .08);
+    --fx-shadow: 0 4px 12px rgba(31, 35, 41, .1);
+    --fx-shadow-lg: 0 12px 32px rgba(31, 35, 41, .14);
+
+    /* ---- 字重层级 ----
+       改版前几乎全是 400，标题和正文一样重，整屏没有层级。 */
+    --fw-normal: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+
+    /* ---- 间距 ---- */
+    --fx-gap-1: 4px;
+    --fx-gap-2: 8px;
+    --fx-gap-3: 12px;
+    --fx-gap-4: 16px;
+
+    /* ---- 交互反馈 ----
+       统一 120ms。改版前混着 0.1/0.15/0.2/0.25s，hover 手感不一致。 */
+    --fx-t: 120ms;
+}
+
+/* ============================================================
    Extension Builder - Blockly-based UI
    Layout matches TurboWarp editor style
 
@@ -66,7 +140,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s;
+    transition: background 0 var(--fx-t);
 }
 
 :global(.ext-left-btn:hover) {
@@ -104,7 +178,7 @@
     flex: 1;
     display: flex;
     overflow: hidden;
-    background: #ffffff;
+    background: var(--fx-bg);
     min-height: 0;
 }
 
@@ -130,9 +204,9 @@
     min-width: 300px;
     min-height: 360px;
     max-height: calc(100vh - 80px);
-    background: #fff;
+    background: var(--fx-bg);
     color: #202124;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
@@ -166,7 +240,7 @@
     padding: 12px 16px;
     background: #f8f9fa;
     border-bottom: 1px solid #e8eaed;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--fx-radius-sm) 10px 0 0;
     flex-shrink: 0;
     cursor: default;
     user-select: none;
@@ -190,7 +264,7 @@
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: #5f6368;
+    color: var(--fx-text-2);
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
@@ -198,7 +272,7 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    transition: background 0.1s;
+    transition: background 0 var(--fx-t);
 }
 
 :global(.ext-builder-tb-btn:hover) {
@@ -265,9 +339,9 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #f7f7f7;
-    border-right: 1px solid #d0d0d0;
-    border-bottom: 1px solid #d0d0d0;
+    background: var(--fx-bg-subtle);
+    border-right: 1px solid var(--fx-border);
+    border-bottom: 1px solid var(--fx-border);
     padding: 8px;
     gap: 4px;
     overflow-y: auto;
@@ -299,9 +373,9 @@
     justify-content: space-between;
     font-size: 12px;
     color: #1a1a1a;
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
-    transition: background 0.15s, border-color 0.15s;
+    background: var(--fx-bg);
+    border: 1px solid var(--fx-border);
+    transition: background 0 var(--fx-t), border-color 0.15s;
 }
 
 :global(.ext-block-list-item:hover) {
@@ -309,7 +383,7 @@
 }
 
 :global(.ext-block-list-item.selected) {
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
     border-color: #3373cc;
 }
@@ -326,7 +400,7 @@
     height: 18px;
     padding: 0;
     background: transparent;
-    color: #999;
+    color: var(--fx-text-3);
     border: none;
     cursor: pointer;
     font-size: 12px;
@@ -346,14 +420,14 @@
 
 :global(.ext-block-list-add) {
     padding: 6px 8px;
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
     text-align: center;
-    transition: background 0.15s;
+    transition: background 0 var(--fx-t);
     margin-top: 4px;
 }
 
@@ -368,7 +442,7 @@
     padding: 6px 8px;
     margin: 0 0 6px 0;
     background: #f3f3f3;
-    border: 1px solid #d0d0d0;
+    border: 1px solid var(--fx-border);
     border-radius: 4px;
     color: #444;
     cursor: pointer;
@@ -377,9 +451,9 @@
 }
 
 :global(.ext-block-list-settings:hover) {
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
 }
 
 :global(.ext-block-list-name-input) {
@@ -433,7 +507,7 @@
 :global(.ext-settings-banner-icon) {
     width: 56px;
     height: 56px;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     background: rgba(255, 255, 255, 0.95);
     object-fit: contain;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -450,7 +524,7 @@
     font-size: 20px;
     font-weight: 600;
     margin: 16px 0 12px;
-    color: #333;
+    color: var(--fx-text);
 }
 
 :global(.ext-settings-label) {
@@ -475,17 +549,17 @@
     margin: 0 24px 8px;
     width: calc(100% - 48px);
     padding: 8px 10px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 4px;
     font-size: 13px;
     box-sizing: border-box;
     background: white;
-    color: #333;
+    color: var(--fx-text);
 }
 
 :global(.ext-settings-input:focus) {
     outline: none;
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
     box-shadow: 0 0 0 2px rgba(76, 151, 255, 0.2);
 }
 
@@ -520,7 +594,7 @@
 :global(.ext-settings-color-picker) {
     width: 22px;
     height: 22px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 3px;
     padding: 0;
     background: none;
@@ -544,7 +618,7 @@
 }
 
 :global(.ext-settings-color-swatch.active) {
-    border-color: #333;
+    border-color: var(--fx-text);
     box-shadow: 0 0 0 2px rgba(76, 151, 255, 0.4);
 }
 
@@ -585,7 +659,7 @@
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    color: #999;
+    color: var(--fx-text-3);
 }
 
 /* ===== 快捷键标签页 ===== */
@@ -609,7 +683,7 @@
 :global(.ext-shortcuts-group-title) {
     font-size: 12px;
     font-weight: 600;
-    color: #5f6368;
+    color: var(--fx-text-2);
     margin-bottom: 8px;
 }
 :global(.ext-shortcuts-row) {
@@ -631,7 +705,7 @@
     font-family: Consolas, Monaco, monospace;
     font-size: 11px;
     color: #3c4043;
-    background: #fff;
+    background: var(--fx-bg);
     border: 1px solid #dadce0;
     border-bottom-width: 2px;
     border-radius: 5px;
@@ -657,7 +731,7 @@
 }
 
 :global(.ext-settings-icon-btn) {
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
 }
 
@@ -666,12 +740,12 @@
 }
 
 :global(.ext-settings-icon-clear) {
-    background: #e0e0e0;
+    background: var(--fx-border);
     color: #555;
 }
 
 :global(.ext-settings-icon-clear:hover) {
-    background: #ccc;
+    background: var(--fx-border-strong);
 }
 
 :global(.ext-settings-actions) {
@@ -683,7 +757,7 @@
 
 :global(.ext-settings-cancel) {
     padding: 6px 18px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     background: white;
     color: #555;
     border-radius: 4px;
@@ -692,13 +766,13 @@
 }
 
 :global(.ext-settings-cancel:hover) {
-    background: #eee;
+    background: var(--fx-border-subtle);
 }
 
 :global(.ext-settings-done) {
     padding: 6px 22px;
     border: none;
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
     border-radius: 4px;
     cursor: pointer;
@@ -754,8 +828,8 @@
     max-width: 50vw;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
-    border-left: 1px solid #d0d0d0;
+    background: var(--fx-bg);
+    border-left: 1px solid var(--fx-border);
     min-height: 0;
 }
 
@@ -764,8 +838,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    background: #f7f7f7;
-    border-bottom: 1px solid #d0d0d0;
+    background: var(--fx-bg-subtle);
+    border-bottom: 1px solid var(--fx-border);
     flex-shrink: 0;
 }
 
@@ -783,13 +857,13 @@
 :global(.ext-stage-btn) {
     width: 28px;
     height: 28px;
-    background: #ffffff;
+    background: var(--fx-bg);
     color: #555;
-    border: 1px solid #d0d0d0;
+    border: 1px solid var(--fx-border);
     border-radius: 3px;
     cursor: pointer;
     font-size: 14px;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0 var(--fx-t), color 0.15s;
 }
 
 :global(.ext-stage-btn:hover) {
@@ -801,14 +875,14 @@
     width: auto;
     padding: 0 10px;
     font-size: 12px;
-    color: #fff;
+    color: var(--fx-text-inv);
     background: #2e7d32;
     border-color: #2e7d32;
 }
 
 :global(.ext-stage-btn-copy:hover) {
     background: #1b5e20;
-    color: #fff;
+    color: var(--fx-text-inv);
 }
 
 :global(.ext-stage-screen) {
@@ -817,7 +891,7 @@
     margin: 8px;
     border-radius: 4px;
     overflow: auto;
-    border: 2px solid #d0d0d0;
+    border: 2px solid var(--fx-border);
     min-height: 0;
 }
 
@@ -845,20 +919,20 @@
     display: flex;
     justify-content: space-between;
     padding: 8px 12px;
-    background: #f7f7f7;
-    border-top: 1px solid #d0d0d0;
+    background: var(--fx-bg-subtle);
+    border-top: 1px solid var(--fx-border);
     flex-shrink: 0;
 }
 
 :global(.ext-stage-footer button) {
     padding: 4px 12px;
-    background: #ffffff;
+    background: var(--fx-bg);
     color: #1a1a1a;
-    border: 1px solid #d0d0d0;
+    border: 1px solid var(--fx-border);
     border-radius: 3px;
     cursor: pointer;
     font-size: 12px;
-    transition: background 0.15s;
+    transition: background 0 var(--fx-t);
 }
 
 :global(.ext-stage-footer button:hover) {
@@ -867,11 +941,62 @@
 
 /* ---- Bottom panel (variable/list creation): removed (variables/list now created via Blockly variable category) ---- */
 
+
+/* ── 积木分类栏（scratch-blocks 内部 DOM，只能从 CSS 调）──
+   原来：60px 窄条、白底、选中时整行染色，和右侧 flyout 界限模糊；
+   文字色偏淡（rgb(87,94,117)），远看发灰。
+   现在：右侧 1px 分隔线划清区域；选中态用「靛蓝左条 + 浅靛蓝底」
+   这类开发工具的常规手法；文字提到 var(--fx-text)，靠字重与色阶
+   建立层级。色点（scratchCategoryItemBubble）保留 —— 那是 Scratch
+   分类的官方识别色，去掉会让用户认不出分类。 */
+:global(.scratchCategoryMenu) {
+    background: var(--fx-bg-subtle);
+    border-right: 1px solid var(--fx-border);
+    font-family: inherit;
+    color: var(--fx-text);
+}
+
+:global(.scratchCategoryMenuItem) {
+    border-bottom: 1px solid var(--fx-border-subtle);
+    transition: background var(--fx-t);
+}
+
+:global(.scratchCategoryMenuItem:hover) {
+    background: var(--fx-bg-muted);
+}
+
+/* 选中态：左条 + 浅底（原来是一整行高饱和底色） */
+:global(.scratchCategoryMenuItem.categorySelected),
+:global(.scratchCategoryMenuItem.scratchCategorySelected) {
+    background: var(--fx-accent-subtle);
+    box-shadow: inset 2px 0 0 var(--fx-accent);
+}
+
+:global(.scratchCategoryMenuItem.categorySelected .scratchCategoryMenuItemLabel),
+:global(.scratchCategoryMenuItem.scratchCategorySelected .scratchCategoryMenuItemLabel) {
+    color: var(--fx-accent-active);
+    font-weight: var(--fw-semibold);
+}
+
+:global(.scratchCategoryMenuItemLabel) {
+    color: var(--fx-text);
+    font-weight: var(--fw-medium);
+    font-family: inherit;
+    line-height: 1.35;
+}
+
+/* 色点：官方分类色，保留识别性，只做尺寸/对齐规整 */
+:global(.scratchCategoryItemBubble) {
+    border-radius: 2px;
+    border-width: 0 !important;
+    flex-shrink: 0;
+}
+
 /* ---- Blockly theme overrides (these selectors are injected by Blockly at runtime) ---- */
 
 :global(.blocklyToolboxDiv) {
-    background-color: #f7f7f7 !important;
-    border-right: 1px solid #d0d0d0 !important;
+    background-color: var(--fx-bg-subtle) !important;
+    border-right: 1px solid var(--fx-border) !important;
     /* 分类列内容比 Blockly 布局时用的 60px 宽：滚动条约占 16px，
        溢出部分正好压在 flyout 最左侧，把积木开头裁掉一条。
        这里把滚动条隐藏（滚轮仍可滚动分类列表），让视觉宽度回到
@@ -935,16 +1060,21 @@
     width: 100%;
 }
 
+/* ── 顶部菜单栏 ──
+   改版：纯红渐变铺满 → 白底 + 1px 底边 + 靛蓝强调。
+   原来整条高饱和红 + 半透明白按钮（rgba(255,255,255,.1)）是「AI 生成界面」
+   的典型特征：颜色抢戏、控件边界糊在一起。改成中性底后，控件靠
+   边框和 hover 底色区分，扩展名（真正要看的信息）才浮得出来。 */
 :global(.ext-menu-bar) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     height: 40px;
-    background: linear-gradient(180deg, #fc4e4e 0%, #ff5757 50%, #e94545 100%);
-    color: white;
+    background: var(--fx-bg);
+    border-bottom: 1px solid var(--fx-border);
+    color: var(--fx-text);
     padding: 0 10px;
     flex-shrink: 0;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     user-select: none;
     /* 积木计数徽章是 absolute 钉在菜单栏右端的（见 .ext-block-count-badge），
        需要这里作为定位基准。 */
@@ -955,7 +1085,7 @@
 :global(.ext-menu-bar-right) {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
     flex: 1;
 }
 
@@ -966,53 +1096,63 @@
 :global(.ext-menu-bar-center) {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 0 16px;
     font-size: 13px;
+    /* 扩展名是这一栏的重点：加强字重和对比，次要信息退后 */
+    min-width: 0;
 }
 
 :global(.ext-menu-brand) {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding-right: 8px;
-    margin-right: 4px;
-    border-right: 1px solid rgba(255, 255, 255, 0.25);
-    height: 26px;
+    padding-right: var(--fx-gap-3);
+    margin-right: var(--fx-gap-1);
+    border-right: 1px solid var(--fx-border);
+    height: 24px;
 }
 
 :global(.ext-menu-logo) {
-    font-size: 18px;
-    color: #fff;
+    font-size: 16px;
+    color: var(--fx-accent);
     line-height: 1;
 }
 
 :global(.ext-menu-title) {
-    font-weight: 700;
-    font-size: 14px;
-    color: white;
+    font-weight: var(--fw-semibold);
+    font-size: 13.5px;
+    color: var(--fx-text);
+    letter-spacing: -.1px;
 }
 
+/* 按钮：改为「透明底 + 1px 透明边框」，hover 时才显形。
+   常态不画框是 GitHub 顶栏的做法：视觉安静，hover 才有反馈。 */
 :global(.ext-menu-btn) {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 4px;
-    color: white;
+    gap: 5px;
+    padding: 5px 9px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--fx-radius-sm);
+    color: var(--fx-text-2);
     cursor: pointer;
-    font-size: 12px;
-    transition: background 0.1s;
+    font-size: 12.5px;
+    font-family: inherit;
+    font-weight: var(--fw-medium);
+    transition: background var(--fx-t), color var(--fx-t), border-color var(--fx-t);
+    white-space: nowrap;
 }
 
 :global(.ext-menu-btn:hover) {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--fx-bg-muted);
+    border-color: var(--fx-border);
+    color: var(--fx-text);
 }
 
 :global(.ext-menu-btn:active) {
-    background: rgba(255, 255, 255, 0.35);
+    background: var(--fx-bg-inset);
 }
 
 :global(.ext-menu-btn-icon) {
@@ -1026,20 +1166,24 @@
 :global(.ext-menu-home-link) {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 4px;
-    color: white;
+    gap: 5px;
+    padding: 5px 9px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--fx-radius-sm);
+    color: var(--fx-text-2);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 12.5px;
+    font-weight: var(--fw-medium);
+    font-family: inherit;
     text-decoration: none;
-    transition: background 0.1s;
+    transition: background var(--fx-t), color var(--fx-t), border-color var(--fx-t);
 }
 
 :global(.ext-menu-home-link:hover) {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--fx-bg-muted);
+    border-color: var(--fx-border);
+    color: var(--fx-text);
 }
 
 :global(.ext-menu-home-icon) {
@@ -1047,32 +1191,39 @@
     line-height: 1;
 }
 
+/* 「重置」这类破坏性操作：平时低调，hover 才转红 */
 :global(.ext-menu-btn-warn) {
-    background: rgba(0, 0, 0, 0.15);
-    border-color: rgba(255, 255, 255, 0.35);
+    background: transparent;
+    border-color: transparent;
+    color: var(--fx-text-2);
 }
-
 :global(.ext-menu-btn-warn:hover) {
-    background: rgba(0, 0, 0, 0.3);
+    background: #fff2f0;
+    border-color: #ffc9c2;
+    color: #c92a1c;
 }
 
 :global(.ext-menu-btn-switch) {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.25);
+    background: transparent;
+    border-color: transparent;
 }
 :global(.ext-menu-btn-switch:hover) {
-    background: rgba(255, 255, 255, 0.22);
+    background: var(--fx-bg-muted);
+    border-color: var(--fx-border);
 }
 
 :global(.ext-menu-ext-name) {
-    font-weight: 600;
-    color: white;
+    font-weight: var(--fw-semibold);
+    color: var(--fx-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 :global(.ext-menu-ext-id) {
-    color: rgba(255, 255, 255, 0.85);
-    font-family: monospace;
-    font-size: 12px;
+    color: var(--fx-text-3);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11.5px;
 }
 
 /* ---- Per-block editor (AstraEditor-style) ---- */
@@ -1080,8 +1231,8 @@
 :global(.ext-block-editor) {
     margin-top: 10px;
     padding: 10px;
-    background: #ffffff;
-    border: 1px solid #d0d0d0;
+    background: var(--fx-bg);
+    border: 1px solid var(--fx-border);
     border-radius: 5px;
     display: flex;
     flex-direction: column;
@@ -1096,18 +1247,18 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--fx-border-subtle);
     padding-bottom: 6px;
 }
 
 :global(.ext-block-editor-title) {
     font-weight: 600;
-    color: #333;
+    color: var(--fx-text);
     font-size: 12px;
 }
 
 :global(.ext-block-editor-name) {
-    color: #999;
+    color: var(--fx-text-3);
     font-size: 11px;
     max-width: 140px;
     overflow: hidden;
@@ -1125,7 +1276,7 @@
     justify-content: center;
     gap: 10px;
     margin-bottom: 8px;
-    color: #999;
+    color: var(--fx-text-3);
     position: relative;
     overflow: hidden;
 }
@@ -1157,17 +1308,17 @@
     display: block;
     width: 100%;
     padding: 4px 6px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 3px;
     font-size: 12px;
     box-sizing: border-box;
-    background: #fff;
-    color: #333;
+    background: var(--fx-bg);
+    color: var(--fx-text);
 }
 
 :global(.ext-block-editor-input:focus) {
     outline: none;
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
     box-shadow: 0 0 0 2px rgba(76, 151, 255, 0.2);
 }
 
@@ -1183,10 +1334,10 @@
     width: 30px;
     height: 24px;
     padding: 0;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 3px;
     cursor: pointer;
-    background: #fff;
+    background: var(--fx-bg);
 }
 
 :global(.ext-block-colour-swatch) {
@@ -1204,27 +1355,27 @@
 
 :global(.ext-block-colour-swatch-active) {
     border-color: #1a1a1a;
-    box-shadow: 0 0 0 2px #fff inset;
+    box-shadow: 0 0 0 2px var(--fx-bg) inset;
 }
 
 :global(.ext-block-colour-clear) {
     font-size: 11px;
     color: #888;
-    border: 1px solid #ddd;
-    background: #fff;
+    border: 1px solid var(--fx-border);
+    background: var(--fx-bg);
     border-radius: 3px;
     padding: 2px 6px;
     cursor: pointer;
 }
 
 :global(.ext-block-colour-clear:hover) {
-    color: #333;
+    color: var(--fx-text);
     border-color: #bbb;
 }
 
 :global(.ext-block-editor-section) {
     margin: 8px 0 2px;
-    color: #333;
+    color: var(--fx-text);
     font-size: 12px;
     font-weight: 500;
 }
@@ -1249,7 +1400,7 @@
     padding: 6px 8px;
     border: none;
     border-radius: 4px;
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
     cursor: pointer;
     font-size: 12px;
@@ -1315,7 +1466,7 @@
     padding: 0 6px;
     background: transparent;
     border: 1px solid #555;
-    color: #ccc;
+    color: var(--fx-border-strong);
     border-radius: 3px;
     cursor: pointer;
     font-size: 10px;
@@ -1366,7 +1517,7 @@
 :global(.ext-block-editor-preview-field) {
     display: inline-block;
     padding: 1px 6px;
-    background: #1a73e8;
+    background: var(--fx-accent);
     border-radius: 8px;
     color: white;
     font-size: 10px;
@@ -1382,7 +1533,7 @@
 
 :global(.ext-block-editor-preview-svg) {
     min-height: 50px;
-    background: #fff;
+    background: var(--fx-bg);
     border-radius: 3px;
     padding: 12px 8px;
     display: flex;
@@ -1427,7 +1578,7 @@
 }
 
 :global(.ext-block-editor-meta summary:hover) {
-    color: #fff;
+    color: var(--fx-bg);
 }
 
 :global(.ext-block-editor-buttons) {
@@ -1441,7 +1592,7 @@
     padding: 5px 8px;
     border: none;
     border-radius: 3px;
-    background: #4c97ff;
+    background: var(--fx-accent);
     color: white;
     cursor: pointer;
     font-size: 11px;
@@ -1514,7 +1665,7 @@
 }
 
 :global(.ext-preview-modal-close:hover) {
-    color: #fff;
+    color: var(--fx-bg);
 }
 
 :global(.ext-preview-modal-sub) {
@@ -1541,7 +1692,7 @@
     padding: 8px;
     max-height: 60vh;
     background: #000;
-    color: #fff;
+    color: var(--fx-text-inv);
     border-radius: 0 0 6px 6px;
 }
 
@@ -1574,7 +1725,7 @@
 :global(.ext-preview-empty) {
     text-align: center;
     padding: 20px;
-    color: #999;
+    color: var(--fx-text-3);
     font-size: 12px;
 }
 
@@ -1591,7 +1742,7 @@
     background: rgba(255, 255, 255, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 4px;
-    color: #fff;
+    color: var(--fx-bg);
     font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
@@ -1599,7 +1750,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
-    transition: background .15s;
+    transition: background var(--fx-t);
 }
 
 :global(.ext-menu-user:hover) {
@@ -1617,9 +1768,10 @@
     top: calc(100% + 4px);
     right: 0;
     min-width: 160px;
-    background: #fff;
+    background: var(--fx-bg);
     border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--fx-border);
+    box-shadow: var(--fx-shadow);
     z-index: 1000;
     padding: 6px 0;
     display: flex;
@@ -1634,11 +1786,11 @@
     padding: 9px 16px;
     border: none;
     background: transparent;
-    color: #333;
+    color: var(--fx-text);
     font-size: 13px;
     cursor: pointer;
     text-align: left;
-    transition: background .12s;
+    transition: background var(--fx-t);
 }
 :global(.ext-user-menu-item:hover) {
     background: #f0f4ff;
@@ -1657,7 +1809,7 @@
 }
 :global(.ext-user-menu-divider) {
     height: 1px;
-    background: #eee;
+    background: var(--fx-border-subtle);
     margin: 4px 10px;
 }
 
@@ -1678,17 +1830,17 @@
     padding: 8px 16px;
     border: none;
     background: transparent;
-    color: #333;
+    color: var(--fx-text);
     font-size: 13px;
     cursor: pointer;
     text-align: left;
-    transition: background .12s;
+    transition: background var(--fx-t);
 }
 :global(.ext-account-switcher-item:hover) {
     background: #f0f4ff;
 }
 :global(.ext-account-switcher-current) {
-    background: #e8f0fe;
+    background: var(--fx-accent-subtle);
     color: #1a56db;
     font-weight: 600;
 }
@@ -1727,7 +1879,7 @@
 :global(.ext-account-switcher-empty) {
     padding: 8px 16px;
     font-size: 12px;
-    color: #999;
+    color: var(--fx-text-3);
     text-align: center;
 }
 
@@ -1750,9 +1902,10 @@
     top: calc(100% + 4px);
     left: 0;
     min-width: 160px;
-    background: #fff;
+    background: var(--fx-bg);
     border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--fx-border);
+    box-shadow: var(--fx-shadow);
     z-index: 1000;
     padding: 6px 0;
     display: flex;
@@ -1767,11 +1920,11 @@
     padding: 9px 16px;
     border: none;
     background: transparent;
-    color: #333;
+    color: var(--fx-text);
     font-size: 13px;
     cursor: pointer;
     text-align: left;
-    transition: background .12s;
+    transition: background var(--fx-t);
 }
 :global(.ext-tools-menu-item:hover) {
     background: #f0f4ff;
@@ -1793,7 +1946,7 @@
 :global(.ext-auth-card) {
     width: 400px;
     max-height: 86vh;
-    background: #ffffff;
+    background: var(--fx-bg);
     color: #1a1a1a;
     border-radius: 8px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
@@ -1851,7 +2004,7 @@
     padding: 10px 14px;
     font-size: 13px;
     font-weight: 600;
-    color: #1a73e8;
+    color: var(--fx-accent);
     background: #eef4fe;
     border: 1px solid #c7dcfb;
     border-radius: 6px;
@@ -1861,7 +2014,7 @@
 
 :global(.ext-device-steps) {
     font-size: 12px;
-    color: #5f6368;
+    color: var(--fx-text-2);
     line-height: 1.7;
 }
 :global(.ext-device-steps ol) {
@@ -1881,14 +2034,14 @@
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: #5f6368;
+    color: var(--fx-text-2);
 }
 
 :global(.ext-device-spinner) {
     width: 13px;
     height: 13px;
     border: 2px solid #d2d9e2;
-    border-top-color: #1a73e8;
+    border-top-color: var(--fx-accent);
     border-radius: 50%;
     animation: ext-device-spin .8s linear infinite;
 }
@@ -1918,9 +2071,9 @@
     width: 620px;
     max-width: 94vw;
     max-height: 84vh;
-    background: #ffffff;
+    background: var(--fx-bg);
     color: #1a1a1a;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: column;
@@ -1981,8 +2134,8 @@
     padding: 9px 22px;
     font-size: 14px;
     font-weight: 600;
-    color: #fff;
-    background: #4c97ff;
+    color: var(--fx-bg);
+    background: var(--fx-accent);
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -1995,7 +2148,7 @@
     font-size: 14px;
     font-weight: 600;
     color: #4a5568;
-    background: #fff;
+    background: var(--fx-bg);
     border: 1px solid #d5dbe3;
     border-radius: 8px;
     cursor: pointer;
@@ -2016,7 +2169,7 @@
     padding: 0 1px;
     font-size: inherit;
     font-family: inherit;
-    color: #1a73e8;
+    color: var(--fx-accent);
     background: none;
     border: none;
     cursor: pointer;
@@ -2076,7 +2229,7 @@
     font-size: 11px;
     color: #4c97ff;
     background: #e8f1ff;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     padding: 1px 8px;
     margin-left: auto;
 }
@@ -2092,8 +2245,8 @@
 /* 推荐标签 */
 :global(.ext-addon-recommend) {
     font-size: 10px;
-    color: #fff;
-    background: #4c97ff;
+    color: var(--fx-bg);
+    background: var(--fx-accent);
     border-radius: 8px;
     padding: 1px 7px;
     margin-left: 6px;
@@ -2105,7 +2258,7 @@
 /* 内置插件标记（随编辑器打包、默认启用、不可关闭） */
 :global(.ext-addon-builtin) {
     font-size: 10px;
-    color: #fff;
+    color: var(--fx-bg);
     background: #4db6ac;
     border-radius: 8px;
     padding: 1px 7px;
@@ -2202,18 +2355,18 @@
     border-radius: 4px;
     font-size: 13px;
     background: #fafbfc;
-    transition: border-color .15s;
+    transition: border-color var(--fx-t);
 }
 
 :global(.ext-addons-search-input:focus) {
     outline: none;
-    border-color: #4c97ff;
-    background: #fff;
+    border-color: var(--fx-accent);
+    background: var(--fx-bg);
 }
 
 :global(.ext-addon-empty) {
     text-align: center;
-    color: #999;
+    color: var(--fx-text-3);
     font-size: 13px;
     padding: 24px 12px;
 }
@@ -2238,7 +2391,7 @@
     color: #444;
     font-size: 12px;
     cursor: pointer;
-    transition: background .15s, border-color .15s;
+    transition: background var(--fx-t), border-color .15s;
 }
 
 :global(.ext-addons-action-btn:hover) {
@@ -2315,7 +2468,7 @@
     color: #0a956e;
     background: #e6f7ef;
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     font-weight: 600;
 }
 :global(.ext-market-loading),
@@ -2343,7 +2496,7 @@
     gap: 10px;
 }
 :global(.ext-market-card) {
-    background: #fff;
+    background: var(--fx-bg);
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 10px 12px;
@@ -2373,8 +2526,8 @@
 }
 :global(.ext-market-install-btn) {
     margin-top: 4px;
-    background: #4c97ff;
-    color: #fff;
+    background: var(--fx-accent);
+    color: var(--fx-bg);
     border: none;
     border-radius: 6px;
     padding: 7px 0;
@@ -2395,8 +2548,8 @@
 
 /* 导入插件主按钮 */
 :global(.ext-addons-action-btn-primary) {
-    color: #fff;
-    background: #4c97ff;
+    color: var(--fx-bg);
+    background: var(--fx-accent);
     border-color: #3b86f0;
     font-weight: 500;
 }
@@ -2428,7 +2581,7 @@
     display: flex;
     gap: 4px;
     padding: 8px 16px 0;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--fx-border-subtle);
 }
 :global(.ext-doc-tab) {
     padding: 8px 16px;
@@ -2493,7 +2646,7 @@
 }
 :global(.ext-doc-table th) {
     background: #f5f7fa;
-    color: #333;
+    color: var(--fx-text);
     font-weight: 600;
 }
 :global(.ext-doc-table code), :global(.ext-doc-p code), :global(.ext-doc-ul code), :global(.ext-doc-ol code) {
@@ -2522,8 +2675,8 @@
     cursor: pointer;
 }
 :global(.ext-doc-copy:hover) {
-    background: #fff;
-    border-color: #4c97ff;
+    background: var(--fx-bg);
+    border-color: var(--fx-accent);
 }
 :global(.ext-doc-pre) {
     margin: 0;
@@ -2551,7 +2704,7 @@
     justify-content: space-between;
     padding: 12px 16px;
     background: #f2f2f2;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--fx-border);
     flex-shrink: 0;
 }
 
@@ -2570,32 +2723,32 @@
 
 :global(.ext-auth-label) {
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
     margin-top: 4px;
 }
 
 :global(.ext-auth-input) {
     padding: 8px 10px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 4px;
     font-size: 13px;
     color: #1a1a1a;
-    background: #fff;
+    background: var(--fx-bg);
     outline: none;
     box-sizing: border-box;
     width: 100%;
 }
 
 :global(.ext-auth-input:focus) {
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
     box-shadow: 0 0 0 2px rgba(76, 151, 255, 0.25);
 }
 
 :global(.ext-auth-btn) {
     margin-top: 10px;
     padding: 8px 12px;
-    background: #4c97ff;
-    color: #fff;
+    background: var(--fx-accent);
+    color: var(--fx-bg);
     border: none;
     border-radius: 4px;
     font-size: 13px;
@@ -2638,8 +2791,8 @@
     padding: 0 14px;
     height: 36px;
     border: 1px solid #4c97ff;
-    background: #4c97ff;
-    color: #fff;
+    background: var(--fx-accent);
+    color: var(--fx-bg);
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
@@ -2695,7 +2848,7 @@
     align-items: center;
     justify-content: center;
     background: #24292f;
-    color: #fff;
+    color: var(--fx-text-inv);
     border: 1px solid #24292f;
     border-radius: 4px;
     font-size: 13px;
@@ -2744,7 +2897,7 @@
     height: 56px;
     border-radius: 50%;
     background: linear-gradient(135deg, #4c97ff, #0f6fde);
-    color: #fff;
+    color: var(--fx-bg);
     font-size: 26px;
     font-weight: 700;
     display: flex;
@@ -2772,7 +2925,7 @@
     font-size: 12px;
     color: #4c97ff;
     background: #e8f1ff;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     padding: 1px 8px;
     align-self: flex-start;
 }
@@ -2809,7 +2962,7 @@
 :global(.ext-profile-stat-label) {
     display: block;
     font-size: 11px;
-    color: #999;
+    color: var(--fx-text-3);
     margin-top: 2px;
 }
 
@@ -2821,7 +2974,7 @@
 :global(.ext-profile-saves-title) {
     font-size: 13px;
     font-weight: 600;
-    color: #333;
+    color: var(--fx-text);
     border-bottom: 1px solid #eef0f3;
     padding-bottom: 6px;
 }
@@ -2852,7 +3005,7 @@
 :global(.ext-profile-save-name) {
     font-size: 13px;
     font-weight: 600;
-    color: #333;
+    color: var(--fx-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2861,7 +3014,7 @@
 
 :global(.ext-profile-save-time) {
     font-size: 11px;
-    color: #999;
+    color: var(--fx-text-3);
     margin-top: 2px;
 }
 
@@ -2876,7 +3029,7 @@
     font-size: 12px;
     border-radius: 4px;
     border: 1px solid #4c97ff;
-    background: #fff;
+    background: var(--fx-bg);
     color: #2b6cb0;
     cursor: pointer;
 }
@@ -2896,7 +3049,7 @@
 
 :global(.ext-profile-saves-empty) {
     font-size: 12px;
-    color: #999;
+    color: var(--fx-text-3);
     text-align: center;
     padding: 14px 8px;
 }
@@ -2943,7 +3096,7 @@
 
 :global(.ext-saves-empty) {
     font-size: 12px;
-    color: #999;
+    color: var(--fx-text-3);
     padding: 6px 0;
 }
 
@@ -2961,7 +3114,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 8px 10px;
-    background: #f7f7f7;
+    background: var(--fx-bg-subtle);
     border: 1px solid #e3e3e3;
     border-radius: 5px;
 }
@@ -2982,7 +3135,7 @@
 
 :global(.ext-saves-item-time) {
     font-size: 11px;
-    color: #999;
+    color: var(--fx-text-3);
     margin-top: 2px;
 }
 
@@ -2995,16 +3148,16 @@
 :global(.ext-saves-act) {
     padding: 3px 8px;
     font-size: 11px;
-    color: #333;
-    background: #fff;
-    border: 1px solid #ccc;
+    color: var(--fx-text);
+    background: var(--fx-bg);
+    border: 1px solid var(--fx-border-strong);
     border-radius: 3px;
     cursor: pointer;
 }
 
 :global(.ext-saves-act:hover) {
     background: #eef4ff;
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
     color: #2b6cb0;
 }
 
@@ -3032,7 +3185,7 @@
 
 :global(.ext-sync-hint) {
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
     margin: 0;
     line-height: 1.5;
 }
@@ -3047,8 +3200,8 @@
     flex: 1;
     font-size: 11px;
     font-family: monospace;
-    color: #333;
-    border: 1px solid #ccc;
+    color: var(--fx-text);
+    border: 1px solid var(--fx-border-strong);
     border-radius: 4px;
     padding: 6px;
     resize: none;
@@ -3139,7 +3292,7 @@
 
 :global(.ext-friends-intro) {
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
     background: #f5f7fa;
     border-radius: 4px;
     padding: 8px 12px;
@@ -3161,13 +3314,13 @@
     border-radius: 4px;
     font-size: 13px;
     background: #fafbfc;
-    transition: border-color .15s;
+    transition: border-color var(--fx-t);
 }
 
 :global(.ext-friends-search-input:focus) {
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
     outline: none;
-    background: #fff;
+    background: var(--fx-bg);
 }
 
 :global(.ext-friends-search-btn) {
@@ -3175,8 +3328,8 @@
     padding: 7px 16px;
     border: none;
     border-radius: 4px;
-    background: #4c97ff;
-    color: #fff;
+    background: var(--fx-accent);
+    color: var(--fx-bg);
     font-size: 13px;
     cursor: pointer;
 }
@@ -3230,7 +3383,7 @@
     padding: 5px 12px;
     border: 1px solid #4c97ff;
     border-radius: 4px;
-    background: #fff;
+    background: var(--fx-bg);
     color: #4c97ff;
     font-size: 12px;
     cursor: pointer;
@@ -3288,7 +3441,7 @@
 :global(.ext-friends-empty) {
     padding: 24px 12px;
     text-align: center;
-    color: #999;
+    color: var(--fx-text-3);
     font-size: 13px;
     line-height: 1.6;
 }
@@ -3316,10 +3469,10 @@
     border: none;
     border-radius: 4px;
     background: #2b7de9;
-    color: #fff;
+    color: var(--fx-text-inv);
     font-size: 13px;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0 var(--fx-t);
 }
 :global(.ext-plugin-btn):hover {
     background: #1f6fd0;
@@ -3333,7 +3486,7 @@
     width: 320px;
     max-height: 70vh;
     overflow: auto;
-    background: #fff;
+    background: var(--fx-bg);
     border: 1px solid #d9d9e3;
     border-radius: 8px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.22);
@@ -3346,14 +3499,14 @@
     font-weight: 700;
     font-size: 14px;
     color: #222;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--fx-border-subtle);
     background: #f6f7fb;
     border-radius: 8px 8px 0 0;
 }
 :global(.ext-plugin-panel-body) {
     padding: 12px 14px;
     font-size: 13px;
-    color: #333;
+    color: var(--fx-text);
 }
 
 /* ============ 安装插件对话框 ============ */
@@ -3373,7 +3526,7 @@
     margin: 0 0 14px;
     padding-left: 18px;
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
     line-height: 1.7;
 }
 :global(.ext-install-sources code) {
@@ -3387,7 +3540,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 10px 12px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--fx-border-strong);
     border-radius: 6px;
     font-size: 13px;
     outline: none;
@@ -3422,7 +3575,7 @@
 :global(.ext-install-note) {
     margin: 14px 0 0;
     font-size: 11px;
-    color: #999;
+    color: var(--fx-text-3);
     line-height: 1.6;
 }
 
@@ -3433,13 +3586,13 @@
     color: #8a8a99;
     background: #f0f1f6;
     padding: 1px 7px;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     white-space: nowrap;
 }
 :global(.ext-addon-update) {
     margin-left: 8px;
     border: none;
-    background: #e8f0fe;
+    background: var(--fx-accent-subtle);
     color: #2b7de9;
     border-radius: 4px;
     padding: 2px 10px;
@@ -3459,8 +3612,8 @@
     width: 680px;
     height: 80vh;
     max-height: calc(100vh - 90px);
-    background: #fff;
-    border-radius: 10px;
+    background: var(--fx-bg);
+    border-radius: var(--fx-radius-sm);
     box-shadow: 0 8px 40px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
     z-index: 99990;
     display: flex;
@@ -3496,9 +3649,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--fx-border);
     background: #f8f9fa;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--fx-radius-sm) 10px 0 0;
     user-select: none;
     flex-shrink: 0;
     cursor: default;
@@ -3510,7 +3663,7 @@
     padding: 12px 16px;
     background: #f8f9fa;
     border-bottom: 1px solid #e8eaed;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--fx-radius-sm) 10px 0 0;
     user-select: none;
     flex-shrink: 0;
     cursor: move;
@@ -3526,7 +3679,7 @@
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: #333;
+    color: var(--fx-text);
 }
 /* 悬浮框右上角按钮（最小化/最大化/关闭） */
 :global(.ext-float-btns) {
@@ -3544,8 +3697,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #5f6368;
-    transition: background .1s;
+    color: var(--fx-text-2);
+    transition: background var(--fx-t);
 }
 :global(.ext-float-btn:hover) { background: #e8eaed; }
 :global(.ext-float-btn-close:hover) { background: #fce8e6; color: #d93025; }
@@ -3627,19 +3780,19 @@
     background: transparent;
     font-size: 13px;
     font-weight: 500;
-    color: #5f6368;
+    color: var(--fx-text-2);
     cursor: pointer;
     text-align: left;
     white-space: nowrap;
-    transition: color .15s, background .15s;
+    transition: color var(--fx-t), background .15s;
 }
 :global(.ext-settings-tab:hover) {
     color: #202124;
     background: rgba(0,0,0,.05);
 }
 :global(.ext-settings-tab.active) {
-    color: #1a73e8;
-    background: #e8f0fe;
+    color: var(--fx-accent);
+    background: var(--fx-accent-subtle);
     font-weight: 600;
 }
 /* 标签页内容区 */
@@ -3656,7 +3809,7 @@
 /* 插件市场卡片：来源仓库名 */
 :global(.ext-market-card-repo) {
     font-size: 11px;
-    color: #1a73e8;
+    color: var(--fx-accent);
     opacity: .8;
     margin: 2px 0 6px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -3675,28 +3828,32 @@
     transform: translateY(-50%);
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 10px;
-    background: rgba(255, 255, 255, 0.18);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
-    color: #fff;
-    font-size: 12px;
+    gap: 5px;
+    padding: 3px 9px;
+    /* 菜单栏从红底改成白底后，这里原本的「半透明白底 + 白字」会整个隐形。
+       改成中性底 + 深字；徽章是次要信息，不该比扩展名更抢眼。 */
+    background: var(--fx-bg-subtle);
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius-sm);
+    color: var(--fx-text-2);
+    font-size: 11.5px;
     cursor: pointer;
-    transition: background .15s;
+    transition: background var(--fx-t), border-color var(--fx-t), color var(--fx-t);
     user-select: none;
     white-space: nowrap;
     z-index: 5;
 }
 :global(.ext-block-count-badge:hover) {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--fx-bg-muted);
+    border-color: var(--fx-border-strong);
+    color: var(--fx-text);
 }
 :global(.ext-block-count-num) {
-    font-weight: 700;
-    font-size: 14px;
+    font-weight: var(--fw-semibold);
+    font-size: 13px;
 }
 :global(.ext-block-count-label) {
-    opacity: 0.9;
+    color: var(--fx-text-3);
 }
 
 /* ── 代码区底部状态栏增强 ── */
@@ -3708,7 +3865,7 @@
     background: rgba(0,0,0,.04);
     border-top: 1px solid rgba(0,0,0,.08);
     font-size: 11px;
-    color: #666;
+    color: var(--fx-text-2);
     gap: 8px;
 }
 :global(.ext-stage-footer-left),
@@ -3728,7 +3885,7 @@
     color: #555;
     font-size: 11px;
     cursor: pointer;
-    transition: background .12s;
+    transition: background var(--fx-t);
 }
 :global(.ext-stage-footer button:hover) {
     background: rgba(0,0,0,.06);
@@ -3769,15 +3926,15 @@
     align-items: center;
     gap: 16px;
     padding: 14px 16px;
-    background: linear-gradient(135deg, #e8f0fe 0%, #f0f4ff 100%);
+    background: linear-gradient(135deg, var(--fx-accent-subtle) 0%, #f0f4ff 100%);
     border: 1px solid #c5d8f7;
-    border-radius: 10px;
+    border-radius: var(--fx-radius-sm);
     margin-bottom: 16px;
 }
 :global(.ext-stats-score-num) {
     font-size: 32px;
     font-weight: 800;
-    color: #1a73e8;
+    color: var(--fx-accent);
     line-height: 1;
 }
 :global(.ext-stats-score-max) {
@@ -3791,12 +3948,12 @@
 :global(.ext-score-level) {
     font-size: 15px;
     font-weight: 600;
-    color: #333;
+    color: var(--fx-text);
     margin-bottom: 2px;
 }
 :global(.ext-score-desc) {
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
 }
 :global(.ext-stats-section-title) {
     font-size: 13px;
@@ -3804,7 +3961,7 @@
     color: #444;
     margin: 14px 0 8px;
     padding-bottom: 4px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--fx-border-subtle);
 }
 :global(.ext-stats-grid) {
     display: grid;
@@ -3821,7 +3978,7 @@
 :global(.ext-stat-card-val) {
     font-size: 22px;
     font-weight: 700;
-    color: #333;
+    color: var(--fx-text);
     line-height: 1.2;
 }
 :global(.ext-stat-card-label) {
@@ -3858,7 +4015,7 @@
 }
 :global(.ext-stat-mini b) {
     font-size: 16px;
-    color: #333;
+    color: var(--fx-text);
     margin-right: 4px;
 }
 :global(.ext-stats-dist) {
@@ -3897,14 +4054,14 @@
 :global(.ext-stats-bar-track) {
     flex: 1;
     height: 16px;
-    background: #eee;
+    background: var(--fx-border-subtle);
     border-radius: 4px;
     overflow: hidden;
 }
 :global(.ext-stats-bar-fill) {
     height: 100%;
     border-radius: 4px;
-    transition: width .3s ease;
+    transition: width var(--fx-t) ease;
     min-width: 2px;
 }
 :global(.ext-stats-tips) {
@@ -3933,7 +4090,7 @@
 }
 :global(.ext-install-hint) {
     font-size: 12px;
-    color: #666;
+    color: var(--fx-text-2);
     line-height: 1.5;
 }
 :global(.ext-install-hint code) {
@@ -3967,17 +4124,17 @@
     display: flex;
     align-items: center;
     background: #f5f5f5;
-    border: 1px solid #d0d0d0;
+    border: 1px solid var(--fx-border);
     border-radius: 6px;
     padding: 8px 12px;
     gap: 8px;
 }
 :global(.ext-install-input-row:focus-within) {
-    border-color: #1a73e8;
+    border-color: var(--fx-accent);
     box-shadow: 0 0 0 2px rgba(26,115,232,.15);
 }
 :global(.ext-install-prompt) {
-    color: #1a73e8;
+    color: var(--fx-accent);
     font-weight: 700;
     font-size: 14px;
     font-family: 'Cascadia Code', 'Consolas', monospace;
@@ -3989,7 +4146,7 @@
     outline: none;
     font-size: 13px;
     font-family: 'Cascadia Code', 'Consolas', monospace;
-    color: #333;
+    color: var(--fx-text);
 }
 :global(.ext-install-input::placeholder) { color: #aaa; }
 :global(.ext-install-toolbar) {
@@ -3999,12 +4156,12 @@
 :global(.ext-install-tool-btn) {
     padding: 6px 14px;
     border-radius: 6px;
-    border: 1px solid #d0d0d0;
-    background: #fff;
-    color: #333;
+    border: 1px solid var(--fx-border);
+    background: var(--fx-bg);
+    color: var(--fx-text);
     font-size: 12px;
     cursor: pointer;
-    transition: background .15s;
+    transition: background var(--fx-t);
 }
 :global(.ext-install-tool-btn:hover) { background: #f0f0f0; }
 :global(.ext-install-tool-btn:disabled) { opacity: .4; cursor: not-allowed; }
@@ -4038,7 +4195,7 @@
 }
 
 :global(.ext-launch-card) {
-    background: #fff;
+    background: var(--fx-bg);
     border: 1px solid #e2e6ec;
     border-radius: 6px;
     padding: 12px;
@@ -4107,8 +4264,8 @@
     padding: 9px 10px;
     border: none;
     border-radius: 4px;
-    background: #4c97ff;
-    color: #fff;
+    background: var(--fx-accent);
+    color: var(--fx-bg);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -4126,7 +4283,7 @@
     padding: 6px 4px;
     border: 1px solid #d5dbe3;
     border-radius: 4px;
-    background: #fff;
+    background: var(--fx-bg);
     color: #3c4a5a;
     font-size: 10px;
     cursor: pointer;
@@ -4157,7 +4314,7 @@
     padding: 5px 6px;
     border: 1px solid #d5dbe3;
     border-radius: 4px;
-    background: #fff;
+    background: var(--fx-bg);
     font-size: 11px;
     color: #1a1a1a;
 }
@@ -4165,7 +4322,7 @@
 :global(.ext-launch-select:focus),
 :global(.ext-launch-input:focus) {
     outline: none;
-    border-color: #4c97ff;
+    border-color: var(--fx-accent);
 }
 
 /* ---- 链接预览（等宽、右对齐显示尾部，方便看清 Data URI 前缀）---- */

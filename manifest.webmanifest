@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "short_name": "ForgeExt",
+  "name": "ForgeExt",
+  "description": "Scratch / TurboWarp 自定义扩展积木编辑器，支持积木增删与 JS 导入导出。",
+  "icons": [
+    {
+      "src": "images/192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "images/512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#333333",
+  "theme_color": "#333333"
+}

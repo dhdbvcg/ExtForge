@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>社区扩展 · ForgeExt</title>
+<meta name="description" content="ForgeExt 社区：浏览其他用户发布的 Scratch / TurboWarp 扩展，一键载入编辑器改成自己的。">
+<link rel="icon" href="favicon.ico">
+<style>
+:root {
+    --brand: #fc4e4e; --brand-dark: #e94545;
+    --ink: #1f2329; --ink-2: #4a5058; --ink-3: #7a818a;
+    --line: #e4e7ec; --bg: #fff; --bg-tint: #f6f8fb;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 4px 16px rgba(16,24,40,.06);
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
+    color: var(--ink); line-height: 1.65; -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+
+/* 顶栏（与主页一致） */
+.nav { position: sticky; top: 0; z-index: 50; background: var(--brand); color: #fff;
+       box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.nav-inner { max-width: 1180px; margin: 0 auto; padding: 0 20px; height: 56px;
+             display: flex; align-items: center; gap: 26px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; background: rgba(255,255,255,.18);
+              display: grid; place-items: center; }
+.brand-mark svg { width: 15px; height: 15px; fill: #fff; }
+.nav-links { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 14px; }
+.nav-links a { padding: 7px 12px; border-radius: 8px; opacity: .9; transition: background .15s; }
+.nav-links a:hover { background: rgba(255,255,255,.16); opacity: 1; }
+.nav-cta { background: #fff; color: var(--brand-dark); font-weight: 600; opacity: 1; }
+.nav-cta:hover { background: #fff; opacity: .92; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+
+/* 头图区 */
+.head { background: linear-gradient(180deg,#fff,var(--bg-tint)); border-bottom: 1px solid var(--line);
+        padding: 44px 0 36px; }
+.head h1 { margin: 0 0 10px; font-size: clamp(26px,4vw,34px); letter-spacing: -.4px; }
+.head p { margin: 0; color: var(--ink-2); font-size: 16px; max-width: 60ch; }
+
+/* 工具条 */
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 22px 0; }
+.search { position: relative; flex: 1; min-width: 220px; }
+.search input {
+    width: 100%; padding: 11px 14px 11px 38px; font-size: 14.5px; font-family: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
+}
+.search input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px #fff1f1; }
+.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+              width: 16px; height: 16px; stroke: var(--ink-3); }
+.select { padding: 11px 12px; font-size: 14.5px; font-family: inherit; border: 1px solid var(--line);
+          border-radius: 10px; background: #fff; color: var(--ink); cursor: pointer; }
+.count { font-size: 14px; color: var(--ink-3); margin-left: auto; }
+
+/* 卡片网格 */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; padding-bottom: 40px; }
+.card {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px;
+    transition: transform .16s, box-shadow .16s, border-color .16s;
+}
+.card:hover { transform: translateY(-2px); box-shadow: 0 2px 6px rgba(16,24,40,.06),0 12px 32px rgba(16,24,40,.10);
+              border-color: #d8dce3; }
+.card-top { display: flex; gap: 12px; align-items: flex-start; }
+.avatar { width: 40px; height: 40px; border-radius: 9px; background: var(--brand); color: #fff;
+          display: grid; place-items: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+.avatar img { width: 100%; height: 100%; border-radius: 9px; object-fit: cover; }
+.card-name { font-size: 16.5px; font-weight: 700; margin: 0 0 3px; word-break: break-word; }
+.card-author { font-size: 12.5px; color: var(--ink-3); }
+.card-desc { font-size: 14px; color: var(--ink-2); margin: 0; flex: 1;
+             display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11.5px; padding: 2px 8px; border-radius: 6px; background: #f1f3f4; color: #5f6368; }
+.chip.brand { background: #fff1f1; color: var(--brand-dark); }
+.card-acts { display: flex; gap: 8px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+       padding: 9px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600;
+       border: 1px solid transparent; cursor: pointer; transition: background .15s, transform .12s; }
+.btn svg { width: 15px; height: 15px; }
+.btn-primary { background: var(--brand); color: #fff; flex: 1; }
+.btn-primary:hover { background: var(--brand-dark); transform: translateY(-1px); }
+.btn-ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+.btn-ghost:hover { border-color: #cfd4dc; }
+.btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+/* 状态 */
+.state { text-align: center; padding: 64px 20px; color: var(--ink-3); grid-column: 1/-1; }
+.state .big { font-size: 15.5px; color: var(--ink-2); margin-bottom: 8px; }
+.spinner { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--brand);
+           border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.skeleton { background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+            height: 178px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+.alert { background: #fff8f8; border: 1px solid #ffdcdc; color: #a50e0e;
+         padding: 12px 16px; border-radius: 10px; font-size: 14px; margin-bottom: 16px; }
+.note { background: #f8f9fa; border: 1px solid var(--line); border-radius: 10px;
+        padding: 13px 16px; font-size: 13.5px; color: var(--ink-2); margin-bottom: 18px; }
+.loadmore { text-align: center; padding-bottom: 48px; }
+
+.footer { background: #14161a; color: #a8aeb8; padding: 30px 20px; font-size: 13.5px; text-align: center; }
+.footer a { color: #cfd3da; }
+
+/* 弹窗 */
+.modal { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: none;
+         align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+.modal.open { display: flex; }
+.modal-box { background: #fff; border-radius: 14px; max-width: 560px; width: 100%;
+             max-height: 84vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.modal-head { padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex;
+              align-items: center; justify-content: space-between; }
+.modal-head h3 { margin: 0; font-size: 17px; }
+.modal-body { padding: 22px 24px; }
+.modal-foot { padding: 16px 24px; border-top: 1px solid var(--line); display: flex;
+              justify-content: flex-end; gap: 10px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: #5f6368; margin-bottom: 5px; }
+.field input, .field textarea {
+    width: 100%; padding: 9px 11px; font-size: 14px; font-family: inherit;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+}
+.field textarea { resize: vertical; min-height: 72px; }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--brand); }
+.code-box { background: #14161a; color: #d7dae0; border-radius: 10px; padding: 14px;
+            font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.6;
+            max-height: 300px; overflow: auto; white-space: pre; }
+.x { border: none; background: none; font-size: 22px; line-height: 1; cursor: pointer;
+     color: var(--ink-3); padding: 0 4px; }
+.x:hover { color: var(--ink); }
+
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+    .grid { grid-template-columns: 1fr; }
+    .count { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-inner">
+        <a class="brand" href="./">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+            </span>
+            ForgeExt
+        </a>
+        <div class="nav-links">
+            <a href="./">首页</a>
+            <a href="./community.html" style="background:rgba(255,255,255,.16);opacity:1">社区</a>
+            <a href="./editor/">编辑器</a>
+            <a class="nav-cta" href="./editor/" id="nav-cta">发布扩展</a>
+        </div>
+    </div>
+</nav>
+
+<div class="head">
+    <div class="wrap">
+        <h1>社区扩展</h1>
+        <p>这里是别人做好的扩展。看中哪个，点「以此为基础修改」就能在编辑器里打开它 —— 积木定义和画布实现都会原样还原，改完另存为自己的新扩展，原作者不受影响。</p>
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="note">
+        社区扩展存在 GitHub Gist 上，由发布者自己的账号托管。ForgeExt 不额外保存内容 ——
+        发布者删除 Gist，条目就没了。
+    </div>
+
+    <div id="error"></div>
+
+    <div class="toolbar">
+        <label class="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input id="q" type="search" placeholder="搜索扩展名或描述…" autocomplete="off">
+        </label>
+        <select class="select" id="sort">
+            <option value="updated">最近更新</option>
+            <option value="name">按名称</option>
+        </select>
+        <span class="count" id="count"></span>
+    </div>
+
+    <div class="notice" id="backend-note" style="display:none"></div>
+
+    <div class="grid" id="grid"></div>
+
+    <div class="loadmore">
+        <button class="btn btn-ghost" id="more" style="display:none">加载更多</button>
+    </div>
+</div>
+
+<footer class="footer">
+    ForgeExt · 独立第三方工具，与 Scratch 基金会无隶属关系 ·
+    <a href="./">首页</a> · <a href="./editor/">编辑器</a>
+</footer>
+
+<!-- 源码预览弹窗 -->
+<div class="modal" id="modal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <h3 id="m-title">扩展源码</h3>
+            <button class="x" id="m-close" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="code-box" id="m-code"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn btn-ghost" id="m-copy">复制源码</button>
+            <button class="btn btn-primary" id="m-ok">好</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   社区列表页
+   纯静态页 + GitHub Gist API。不用构建、不依赖框架 —— 和主页一致，
+   整站只有三个 HTML 文件。
+   ═══════════════════════════════════════════════════════════ */
+
+var EDITOR_URL = './editor/';
+
+var state = {
+    items: [],        // 社区条目
+    raw: [],          // 过滤前的原始条目（分页会追加）
+    page: 1,
+    hasMore: false,
+    loading: false,
+    q: '',
+    sort: 'updated',
+    backend: null,    // 'cloud' | 'gist'
+    notice: '',
+    token: ''         // 用户自己的 token（发布用，浏览不需要）
+};
+
+/* 社区快照的格式约定与社区模块保持一致（这里是页面内联版本）。
+   注意：标记串 'extforge-community' 是数据协议标识、不是显示名 —— 品牌改名
+   （ExtForge → ForgeExt）时故意不改它，否则已发布的社区扩展与浏览器里
+   缓存的列表全部失效。读取端新旧两种标记都认（见 ALL_TAGS）。 */
+var TAG = 'extforge-community';
+var ALL_TAGS = ['extforge-community', 'forgeext-community'];
+
+/* 云端优先、Gist 回退。supabase-config.js 换了项目后，这里也要换 ——
+   两处是同一套凭据，页面读不到 webpack 的模块，只能内联一份。 */
+var CLOUD = {
+    url: 'https://hbndheyywwinwezoekyd.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhibmRoZXl5d3dpbndlem9la3lkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDE0MzMsImV4cCI6MjEwMDExNzQzM30.V01oah5J16cfB0GpfCxueERo5dGczFI-OzVQCvWeoMY'
+};
+function cloudOn() { return !!(CLOUD.url && CLOUD.key); }
+
+function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+}
+
+function icon(paths) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('fill', 'none');
+    s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('stroke-width', '2');
+    s.setAttribute('stroke-linecap', 'round');
+    s.setAttribute('stroke-linejoin', 'round');
+    paths.forEach(function (d) {
+        var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', d);
+        s.appendChild(p);
+    });
+    return s;
+}
+
+var ICON = {
+    use: ['M5 12h14M13 6l6 6-6 6'],
+    code: ['M16 18l6-6-6-6M8 6l-6 6 6 6'],
+    copy: ['M9 9h10v10H9z', 'M5 15V5h10']
+};
+
+function parseDescription(desc) {
+    var s = String(desc || '');
+    // 兼容历史标记（品牌改名后仍要认得旧 Gist）
+    var tag = null;
+    for (var i = 0; i < ALL_TAGS.length; i++) {
+        if (s.indexOf(ALL_TAGS[i]) === 0) { tag = ALL_TAGS[i]; break; }
+    }
+    if (!tag) return null;
+    var rest = s.slice(tag.length).replace(/^\s*·\s*/, '');
+    var parts = rest.split('·').map(function (x) { return x.trim(); }).filter(Boolean);
+    return {name: parts[0] || '未命名扩展', description: parts.slice(1).join(' · ')};
+}
+
+function gistToItem(g) {
+    var tag = parseDescription(g.description);
+    if (!tag) return null;
+    var files = g.files || {};
+    var key = Object.keys(files).filter(function (k) { return /\.json$/i.test(k); })[0] || Object.keys(files)[0];
+    var file = key ? files[key] : null;
+    var snap = null;
+    if (file && file.content) {
+        try {
+            var o = JSON.parse(file.content);
+            if (o && ALL_TAGS.indexOf(o.format) >= 0) snap = o;
+        } catch (e) { /* 非社区 Gist 或内容被截断 */ }
+    }
+    return {
+        gistId: g.id,
+        url: g.html_url,
+        author: (g.owner && g.owner.login) || '',
+        avatar: (g.owner && g.owner.avatar_url) || '',
+        name: tag.name,
+        description: tag.description,
+        updatedAt: g.updated_at,
+        extInfo: snap ? snap.extInfo : null,
+        blockCount: snap ? (snap.customBlocks || []).length : null,
+        code: snap ? (snap.generatedCode || '') : '',
+        entry: snap
+    };
+}
+
+function api(path) {
+    var h = {Accept: 'application/vnd.github+json'};
+    if (state.token) h.Authorization = 'Bearer ' + state.token;
+    return fetch('https://api.github.com' + path, {headers: h});
+}
+
+function cloudApi(path, opts) {
+    var o = opts || {};
+    return fetch(CLOUD.url + '/rest/v1/' + path, {
+        method: o.method || 'GET',
+        headers: {
+            'apikey': CLOUD.key,
+            'Authorization': 'Bearer ' + CLOUD.key,
+            'Content-Type': 'application/json'
+        },
+        body: o.body ? JSON.stringify(o.body) : undefined
+    });
+}
+
+/* 云端行 → 统一条目结构（与编辑器侧 community.js 的 cloudToCommunity 对齐） */
+function cloudRowToItem(r) {
+    return {
+        cloudId: r.id,
+        source: 'cloud',
+        author: r.author || '',
+        name: r.name || '未命名扩展',
+        description: r.description || '',
+        views: r.views_count || 0,
+        likes: r.likes_count || 0,
+        updatedAt: r.updated_at || 0,
+        extInfo: r.ext_info || null,
+        blockCount: (r.custom_blocks || []).length,
+        code: r.generated_code || '',
+        entry: {
+            format: TAG,
+            extInfo: r.ext_info || {},
+            customBlocks: r.custom_blocks || [],
+            workspaceXml: r.workspace_xml || {},
+            generatedCode: r.generated_code || '',
+            description: r.description || ''
+        }
+    };
+}
+
+async function loadFromCloud() {
+    var res = await cloudApi('ext_community?select=*&order=updated_at.desc&limit=200');
+    if (!res.ok) {
+        var t = await res.text().catch(function () { return ''; });
+        throw new Error('云端 HTTP ' + res.status + (t ? ' ' + t.slice(0, 100) : ''));
+    }
+    var rows = await res.json();
+    return (rows || []).map(cloudRowToItem);
+}
+
+async function loadPage(reset) {
+    if (state.loading) return;
+    state.loading = true;
+    if (reset) { state.page = 1; state.raw = []; }
+    render();
+
+    try {
+        var items = null;
+        if (cloudOn()) {
+            try {
+                items = await loadFromCloud();
+                state.backend = 'cloud';
+            } catch (e) {
+                // 云端不可用 → 回退 Gist，功能不至于整个不可用
+                state.backend = 'gist';
+                state.notice = '云端暂不可用（' + e.message + '），已回退到 GitHub Gist';
+            }
+        }
+        if (!items) {
+            var res = await api('/gists/public?per_page=100&page=' + state.page);
+            if (!res.ok) throw new Error('HTTP ' + res.status + '（GitHub 限流时可稍后重试）');
+            var list = await res.json();
+            if (!Array.isArray(list)) throw new Error('返回格式异常');
+            items = list.map(gistToItem).filter(Boolean);
+            if (state.backend !== 'gist') state.backend = 'gist';
+            state.hasMore = list.length >= 100;
+            if (state.hasMore) state.page += 1;
+        } else {
+            state.hasMore = false;
+        }
+        state.raw = state.raw.concat(items);
+        applyFilter();
+        clearError();
+    } catch (e) {
+        showError('拉取社区列表失败：' + e.message);
+    } finally {
+        state.loading = false;
+        render();
+    }
+}
+
+function applyFilter() {
+    var q = state.q.toLowerCase();
+    var items = state.raw.slice();
+    if (q) {
+        items = items.filter(function (it) {
+            return (it.name + ' ' + it.description + ' ' + (it.extInfo && it.extInfo.description || '')).toLowerCase().indexOf(q) >= 0;
+        });
+    }
+    if (state.sort === 'name') {
+        items.sort(function (a, b) { return a.name.localeCompare(b.name, 'zh'); });
+    } else {
+        items.sort(function (a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)); });
+    }
+    state.items = items;
+    document.getElementById('count').textContent =
+        items.length + ' 个扩展' + (state.raw.length > items.length ? '（已按关键词筛选，共拉取 ' + state.raw.length + '）' : '');
+
+    // 后端来源提示：云端 vs Gist 回退要说清楚（用户要能知道数据存在哪）
+    var note = document.getElementById('backend-note');
+    if (state.backend === 'gist' && cloudOn()) {
+        note.textContent = state.notice || '云端暂不可用，当前显示的是 GitHub Gist 上的扩展。';
+        note.style.display = '';
+    } else if (state.backend === 'cloud') {
+        note.textContent = '数据来自云端，无需登录即可浏览。发布请在编辑器内「设置 → 社区」。';
+        note.style.display = '';
+    } else {
+        note.style.display = 'none';
+    }
+}
+
+function showError(msg) {
+    var box = document.getElementById('error');
+    box.innerHTML = '';
+    var a = el('div', 'alert', msg);
+    box.appendChild(a);
+}
+function clearError() { document.getElementById('error').innerHTML = ''; }
+
+function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function render() {
+    var grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    if (state.loading && !state.raw.length) {
+        for (var i = 0; i < 6; i++) grid.appendChild(el('div', 'skeleton'));
+        return;
+    }
+    if (!state.items.length) {
+        var s = el('div', 'state');
+        s.appendChild(el('div', 'big', state.q ? '没有匹配的扩展' : '社区还是空的'));
+        s.appendChild(el('div', null, state.q ? '换个关键词试试' : '做好的第一个扩展，就是社区的第一个帖子'));
+        grid.appendChild(s);
+        document.getElementById('more').style.display = 'none';
+        return;
+    }
+
+    state.items.forEach(function (it) { grid.appendChild(renderCard(it)); });
+    document.getElementById('more').style.display = state.hasMore ? '' : 'none';
+}
+
+function renderCard(it) {
+    var c = el('div', 'card');
+
+    // 作者 + 名称
+    var top = el('div', 'card-top');
+    var av = el('div', 'avatar');
+    if (it.avatar) {
+        var img = document.createElement('img');
+        img.src = it.avatar;
+        img.alt = '';
+        img.referrerPolicy = 'no-referrer';
+        img.onerror = function () { av.textContent = (it.author || '?').charAt(0).toUpperCase(); };
+        av.appendChild(img);
+    } else {
+        av.textContent = (it.author || it.name || '?').charAt(0).toUpperCase();
+    }
+    top.appendChild(av);
+
+    var meta = el('div');
+    meta.appendChild(el('div', 'card-name', it.name));
+    meta.appendChild(el('div', 'card-author',
+        (it.author ? '@' + it.author : '匿名') + (it.updatedAt ? ' · ' + fmtDate(it.updatedAt) : '')));
+    top.appendChild(meta);
+    c.appendChild(top);
+
+    c.appendChild(el('p', 'card-desc',
+        it.description || (it.extInfo && it.extInfo.description) || '（作者没写描述）'));
+
+    // 信息标签
+    var chips = el('div', 'chips');
+    if (it.extInfo && it.extInfo.id) {
+        var chip = el('span', 'chip brand', it.extInfo.id);
+        chips.appendChild(chip);
+    }
+    if (it.blockCount != null) chips.appendChild(el('span', 'chip', it.blockCount + ' 个积木'));
+    if (it.views) chips.appendChild(el('span', 'chip', '👁 ' + it.views));
+    if (it.likes) chips.appendChild(el('span', 'chip', '♥ ' + it.likes));
+    chips.appendChild(el('span', 'chip', 'MPL-2.0'));
+    if (chips.children.length) c.appendChild(chips);
+
+    // 操作
+    var acts = el('div', 'card-acts');
+
+    var useBtn = el('button', 'btn btn-primary');
+    useBtn.appendChild(icon(ICON.use));
+    useBtn.appendChild(el('span', null, '以此为基础修改'));
+    useBtn.onclick = function () {
+        // 浏览量统计（云端条目才有意义；Gist 侧略过），静默不阻塞跳转
+        if (it.source === 'cloud' && it.cloudId && cloudOn()) {
+            cloudApi('rpc/bump_community_views', {method: 'POST', body: {id: it.cloudId}}).catch(function () {});
+        }
+        openInEditor(it);
+    };
+    if (!it.entry) {
+        useBtn.disabled = true;
+        useBtn.title = '这个 Gist 的内容被 GitHub 截断了，稍后重试或点「查看源码」';
+    }
+    acts.appendChild(useBtn);
+
+    var codeBtn = el('button', 'btn btn-ghost');
+    codeBtn.appendChild(icon(ICON.code));
+    codeBtn.onclick = function () { showSource(it); };
+    acts.appendChild(codeBtn);
+
+    c.appendChild(acts);
+    return c;
+}
+
+/* 「以此为基础修改」：把快照塞进 sessionStorage，跳编辑器，编辑器消费后清掉。
+   用 sessionStorage 而不是 URL 参数：快照有几十万字符，拼进 URL 会超长、
+   而且会进浏览器历史。 */
+function openInEditor(it) {
+    try {
+        sessionStorage.setItem('forgeext_import', JSON.stringify({
+            format: TAG,
+            data: {
+                extInfo: it.entry.extInfo || {},
+                customBlocks: it.entry.customBlocks || [],
+                workspaceXml: it.entry.workspaceXml || {},
+                generatedCode: it.entry.generatedCode || ''
+            }
+        }));
+    } catch (e) {
+        alert('这个扩展太大，没法直接载入（' + e.message + '）。可以先看源码再自己搭。');
+        return;
+    }
+    window.location.href = EDITOR_URL;
+}
+
+function showSource(it) {
+    var dlg = document.getElementById('modal');
+    document.getElementById('m-title').textContent = it.name + ' · 扩展源码';
+    var box = document.getElementById('m-code');
+    box.textContent = it.code || (it.entry ? '（该 Gist 没有内嵌源码）' : '正在拉取…');
+    dlg.classList.add('open');
+    if (!it.code && it.gistId) {
+        fetch('https://api.github.com/gists/' + it.gistId, {headers: {Accept: 'application/vnd.github+json'}})
+            .then(function (r) { return r.json(); })
+            .then(function (g) {
+                var files = g.files || {};
+                var k = Object.keys(files)[0];
+                if (k) box.textContent = files[k].content || '(空)';
+            })
+            .catch(function () { box.textContent = '拉取失败，请直接打开 Gist 链接查看。'; });
+    }
+}
+
+document.getElementById('m-close').onclick = function () { document.getElementById('modal').classList.remove('open'); };
+document.getElementById('m-ok').onclick = function () { document.getElementById('modal').classList.remove('open'); };
+document.getElementById('modal').onclick = function (e) { if (e.target === this) this.classList.remove('open'); };
+document.getElementById('m-copy').onclick = function () {
+    var t = document.getElementById('m-code').textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(t);
+    else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+};
+
+var timer = null;
+document.getElementById('q').oninput = function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { state.q = this.value.trim(); applyFilter(); render(); }.bind(this), 220);
+};
+document.getElementById('sort').onchange = function () { state.sort = this.value; applyFilter(); render(); };
+document.getElementById('more').onclick = function () { loadPage(false); };
+
+// 免登录浏览；已登录则带上 token，发布与限流额度都更好
+try {
+    var t = localStorage.getItem('github_oauth_token');
+    if (t) state.token = t;
+} catch (e) { /* 无痕模式等 */ }
+
+loadPage(true);
+</script>
+
+</body>
+</html>

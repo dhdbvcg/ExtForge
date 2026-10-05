@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgeExt —— 像做 Scratch 项目一样做 Scratch 扩展</title>
+<meta name="description" content="ForgeExt 是可视化 Scratch / TurboWarp 扩展编辑器：拖积木定义功能、一键生成扩展源码、直接在浏览器里调。">
+<meta property="og:title" content="ForgeExt">
+<meta property="og:description" content="可视化 Scratch / TurboWarp 扩展编辑器。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://forgeext.github.io/">
+<meta property="og:site_name" content="ForgeExt">
+<link rel="icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+<style>
+/* ═══════════════════════════════════════════════════════════
+   ForgeExt 主页
+   结构参考 MistWarp（顶栏 / hero / 特性卡 / 多区块）与 Dino-Home
+   （满幅 hero / 单一主行动 / 双栏信息卡 / 页脚），主色沿用编辑器
+   自身的品牌红，避免主页和编辑器像两个产品。
+   纯静态单文件：无构建、无依赖、无框架。
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+    --brand: #fc4e4e;
+    --brand-dark: #e94545;
+    --brand-light: #ff8a8a;
+    --ink: #1f2329;
+    --ink-2: #4a5058;
+    --ink-3: #7a818a;
+    --line: #e4e7ec;
+    --bg: #ffffff;
+    --bg-tint: #f6f8fb;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 16px rgba(16, 24, 40, .06);
+    --shadow-hover: 0 2px 6px rgba(16, 24, 40, .06), 0 12px 32px rgba(16, 24, 40, .10);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ── 顶栏 ── */
+.nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--brand);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+
+.nav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 26px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: .2px;
+}
+
+.brand-mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .18);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.brand-mark svg { width: 15px; height: 15px; fill: #fff; }
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    font-size: 14px;
+}
+
+.nav-links a {
+    padding: 7px 12px;
+    border-radius: 8px;
+    opacity: .9;
+    transition: background .15s, opacity .15s;
+}
+
+.nav-links a:hover { background: rgba(255, 255, 255, .16); opacity: 1; }
+
+.nav-cta {
+    background: #fff;
+    color: var(--brand-dark);
+    font-weight: 600;
+    padding: 8px 16px !important;
+    border-radius: 8px;
+    opacity: 1;
+}
+
+.nav-cta:hover { background: #fff; opacity: .92; }
+
+/* ── Hero ── */
+.hero {
+    background: linear-gradient(180deg, #fff 0%, var(--bg-tint) 100%);
+    border-bottom: 1px solid var(--line);
+}
+
+.hero-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 76px 20px 68px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: center;
+}
+
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--brand-dark);
+    background: #fff;
+    border: 1px solid #ffd4d4;
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 20px;
+}
+
+.hero h1 {
+    margin: 0 0 18px;
+    font-size: clamp(32px, 5vw, 50px);
+    line-height: 1.18;
+    letter-spacing: -.6px;
+    font-weight: 800;
+}
+
+.hero h1 em {
+    font-style: normal;
+    color: var(--brand);
+}
+
+.hero-lead {
+    margin: 0 0 30px;
+    font-size: 17px;
+    color: var(--ink-2);
+    max-width: 40em;
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: transform .14s, box-shadow .14s, background .14s;
+}
+
+.btn svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+.btn-primary {
+    background: var(--brand);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(252, 78, 78, .3);
+}
+
+.btn-primary:hover {
+    background: var(--brand-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(252, 78, 78, .34);
+}
+
+.btn-ghost {
+    background: #fff;
+    color: var(--ink);
+    border-color: var(--line);
+}
+
+.btn-ghost:hover {
+    border-color: #cfd4dc;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.hero-note {
+    font-size: 13.5px;
+    color: var(--ink-3);
+}
+
+.hero-note a { color: var(--brand-dark); border-bottom: 1px solid #ffd4d4; }
+.hero-note a:hover { border-bottom-color: var(--brand); }
+
+/* Hero 侧栏：编辑器缩略示意 */
+.hero-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.hero-card-bar {
+    height: 30px;
+    background: linear-gradient(180deg, #fc4e4e, #e94545);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 11px;
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, .45); }
+
+.hero-card-title {
+    margin-left: 6px;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, .95);
+}
+
+.hero-card-body {
+    padding: 20px;
+    display: grid;
+    gap: 11px;
+}
+
+.mini-row { display: flex; gap: 9px; align-items: center; }
+
+.mini-cat {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.mini-block {
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding: 0 11px;
+    font-size: 11.5px;
+    color: #fff;
+    font-weight: 500;
+    min-width: 130px;
+}
+
+.hero-card-list {
+    margin: 6px 0 0;
+    padding: 0 0 0 43px;
+    list-style: none;
+    display: grid;
+    gap: 9px;
+}
+
+/* ── 通用区块 ── */
+.section { padding: 72px 20px; }
+.section-tint { background: var(--bg-tint); border-block: 1px solid var(--line); }
+
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+.sec-head { margin-bottom: 38px; max-width: 62ch; }
+
+.sec-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 10px;
+    font-size: clamp(22px, 3vw, 28px);
+    letter-spacing: -.3px;
+    font-weight: 700;
+}
+
+.sec-title svg { width: 21px; height: 21px; stroke: var(--brand); flex-shrink: 0; }
+
+.sec-lead { margin: 0; font-size: 16px; color: var(--ink-2); }
+
+.grid { display: grid; gap: 20px; }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    transition: transform .16s, box-shadow .16s, border-color .16s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+    border-color: #d8dce3;
+}
+
+.card-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #fff1f1;
+    display: grid;
+    place-items: center;
+    margin-bottom: 15px;
+}
+
+.card-icon svg { width: 20px; height: 20px; stroke: var(--brand); }
+
+.card h3 { margin: 0 0 8px; font-size: 16.5px; font-weight: 700; }
+.card p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+
+/* ── 流程条 ── */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: step; }
+
+.step {
+    position: relative;
+    padding: 26px 22px 0;
+}
+
+.step + .step::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 40px;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #ffd4d4, #ffe9e9);
+}
+
+.step-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+.step h4 { margin: 0 0 6px; font-size: 15.5px; font-weight: 700; }
+.step p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+/* ── 能力表 ── */
+.feat-list { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
+
+.feat-list li {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    font-size: 15px;
+    color: var(--ink-2);
+}
+
+.feat-list svg {
+    width: 19px;
+    height: 19px;
+    stroke: var(--brand);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* ── 提示条 ── */
+.notice {
+    background: #fff8f8;
+    border: 1px solid #ffdcdc;
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.notice svg { width: 21px; height: 21px; stroke: var(--brand-dark); flex-shrink: 0; margin-top: 2px; }
+.notice p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.notice strong { color: var(--ink); }
+
+/* ── 页脚 ── */
+.footer {
+    background: #14161a;
+    color: #a8aeb8;
+    padding: 52px 20px 30px;
+    font-size: 14px;
+}
+
+.footer-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.6fr repeat(3, 1fr);
+    gap: 34px;
+    margin-bottom: 34px;
+}
+
+.footer-brand { display: flex; align-items: center; gap: 9px; color: #fff; font-weight: 700; margin-bottom: 12px; }
+.footer-brand .brand-mark { background: var(--brand); }
+
+.footer h5 {
+    margin: 0 0 13px;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.footer a:hover { color: #fff; }
+.footer-desc { margin: 0; max-width: 34ch; line-height: 1.7; }
+
+.footer-bottom {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-top: 22px;
+    border-top: 1px solid #26292f;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #7d838d;
+}
+
+/* ── 响应式 ── */
+@media (max-width: 900px) {
+    .hero-inner { grid-template-columns: 1fr; gap: 40px; padding: 52px 20px 48px; }
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+    .step:nth-child(3)::before { display: none; }
+    .footer-inner { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 620px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+    .grid-3, .grid-2, .steps, .footer-inner { grid-template-columns: 1fr; }
+    .step + .step::before { display: none; }
+    .step { padding: 18px 0 0; }
+    .section { padding: 52px 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-inner">
+        <a class="brand" href="./">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+            </span>
+            ForgeExt
+        </a>
+        <div class="nav-links">
+            <a href="#features">功能</a>
+            <a href="#how">怎么用</a>
+            <a href="#caps">能力范围</a>
+            <a href="./community.html">社区</a>
+            <a href="https://github.com/dhdbvcg/ForgeExt" target="_blank" rel="noopener">源码</a>
+            <a class="nav-cta" href="./editor/">打开编辑器</a>
+        </div>
+    </div>
+</nav>
+
+<header class="hero">
+    <div class="hero-inner">
+        <div>
+            <span class="eyebrow">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                浏览器里就能用，无需安装
+            </span>
+            <h1>像做 Scratch 项目一样，<br>做 <em>Scratch 扩展</em>。</h1>
+            <p class="hero-lead">
+                拖积木定义功能，右侧实时生成符合 TurboWarp 规范的扩展源码。
+                支持浏览器端直接调试验证，做完一键导出 .js，装进任意 Scratch 衍生版。
+            </p>
+            <div class="hero-actions">
+                <a class="btn btn-primary" href="./editor/">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+                    打开编辑器
+                </a>
+                <a class="btn btn-ghost" href="https://github.com/dhdbvcg/ForgeExt" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A11.5 11.5 0 00.5 12a11.5 11.5 0 007.86 13.92c.58.11.79-.25.79-.55v-2.2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+                    查看源码
+                </a>
+            </div>
+            <p class="hero-note">
+                不隶属 Scratch 官方 · <a href="privacy.html">隐私政策</a> ·
+                <a href="terms.html">使用条款</a>
+            </p>
+        </div>
+
+        <!-- 编辑器界面缩略示意：用纯 CSS 画积木，不引图片，省一次请求也更好维护 -->
+        <div class="hero-card" aria-hidden="true">
+            <div class="hero-card-bar">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <span class="hero-card-title">我的第一个扩展</span>
+            </div>
+            <div class="hero-card-body">
+                <div class="mini-row">
+                    <span class="mini-cat" style="background:#FFBF00">事件</span>
+                    <span class="mini-block" style="background:#4C97FF;min-width:172px">当 ▶ 被点击</span>
+                </div>
+                <div class="mini-row">
+                    <span class="mini-cat" style="background:#FFAB19">控制</span>
+                    <span class="mini-block" style="background:#FFAB19;min-width:172px">重复 10 次</span>
+                </div>
+                <div class="mini-row">
+                    <span class="mini-cat" style="background:#9966FF">外观</span>
+                    <span class="mini-block" style="background:#9966FF;min-width:172px">说 你好! 2 秒</span>
+                </div>
+                <ul class="hero-card-list">
+                    <li class="mini-row"><span class="mini-block" style="background:#0FBD8C;min-width:100%;height:24px;font-size:11px">→ 实时生成 getInfo() 扩展源码</span></li>
+                    <li class="mini-row"><span class="mini-block" style="background:#59C059;min-width:100%;height:24px;font-size:11px">→ 浏览器内调试，不用装 Scratch</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</header>
+
+<section class="section" id="features">
+    <div class="wrap">
+        <div class="sec-head">
+            <h2 class="sec-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                核心能力
+            </h2>
+            <p class="sec-lead">编辑器把扩展开发的重复劳动全部收进可视化界面，源码始终在旁边同步生成。</p>
+        </div>
+
+        <div class="grid grid-3">
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                </div>
+                <h3>可视化定义积木</h3>
+                <p>拖出帽子块 / 堆叠块 / 返回值块 / 布尔块，填参数、选颜色，所见即所得地拼出扩展的全部积木。</p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+                </div>
+                <h3>实时生成源码</h3>
+                <p>右侧面板始终显示与导出完全一致的 TurboWarp 扩展代码：getInfo()、arguments、color1..3 都已填好。</p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                </div>
+                <h3>浏览器内直接调试</h3>
+                <p>把扩展源码变成一条链接，在线打开就能跑 —— 不用先装 Scratch、也不用上传项目文件。</p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                </div>
+                <h3>AI 助手会摆积木</h3>
+                <p>内置 AI 能直接往画布上放积木、接插槽、填参数 —— 说「搭一个碰到边缘就反弹的逻辑」它就动手。</p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+                </div>
+                <h3>多人实时协作</h3>
+                <p>基于 WebRTC 点对点连接，创建房间即可一起编辑同一份扩展，聊天、光标、工作区全部同步。</p>
+            </article>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4-6-4.5-6 4.5 2.4-7.4L2 9.4h7.6L12 2z"/></svg>
+                </div>
+                <h3>插件市场</h3>
+                <p>积木增强、界面美化、AI 模型接入等插件一键安装，也能把自己写的插件发布上去。</p>
+            </article>
+
+            <a class="card" href="./community.html" style="display:block">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+                </div>
+                <h3>社区扩展 ↗</h3>
+                <p>把做好的扩展发布出去，或一键载入别人的扩展改成自己的。存储在你的 GitHub 账号里。</p>
+            </a>
+
+            <article class="card">
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 008 18.13V22"/></svg>
+                </div>
+                <h3>开源免费</h3>
+                <p>GPL-3.0 许可，源代码全部公开。没有账号也能用，登录只是为了发布与协作。</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<section class="section section-tint" id="how">
+    <div class="wrap">
+        <div class="sec-head">
+            <h2 class="sec-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                四步做完
+            </h2>
+            <p class="sec-lead">从空白到能用的扩展，全程不用手写一行代码。</p>
+        </div>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <h4>建扩展</h4>
+                <p>填名称、ID、主色 —— 决定扩展在 Scratch 里的显示方式。</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <h4>定义积木</h4>
+                <p>拖出想要的积木，命名、定形状、填参数、挑颜色。</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <h4>写实现</h4>
+                <p>在画布上用标准积木拼出逻辑 —— 如果对效果满意，交给 AI 也行。</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <h4>导出</h4>
+                <p>复制或下载 .js 文件，装进 TurboWarp、Scratch 或任何衍生版。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="caps">
+    <div class="wrap">
+        <div class="sec-head">
+            <h2 class="sec-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4-6-4.5-6 4.5 2.4-7.4L2 9.4h7.6L12 2z"/></svg>
+                积木能力范围
+            </h2>
+            <p class="sec-lead">工具箱里有 20 个分类、一百多块现成积木，够覆盖绝大多数扩展需求。</p>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card">
+                <h3 style="margin-bottom:16px">内置分类</h3>
+                <ul class="feat-list">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>事件 · 控制 · 运算 · 字符串 · 向量</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>输入 · 变量 · 列表 · 函数 · 积木</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>运行时 · 目标 · 运动 · 外观</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>网络 · 时间 · 浏览器 · 音乐 · 脚本</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom:16px">扩展能做的事</h3>
+                <ul class="feat-list">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>四种积木形状：命令 / 返回值 / 布尔 / 事件帽</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>命名参数、异步块、角色/舞台过滤等标志位</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>MIT / GPL-2.0 / MPL-2.0 许可任选</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>导出即符合 TurboWarp 扩展规范，导入即用</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="notice" style="margin-top:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <p>
+                <strong>免责声明：</strong>ForgeExt 是独立的第三方工具，与 Scratch 基金会、MIT 和
+                TurboWarp 官方均无隶属关系。Scratch 与 TurboWarp 是其各自权利人的商标。
+            </p>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="footer-inner">
+        <div>
+            <div class="footer-brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+                </span>
+                ForgeExt
+            </div>
+            <p class="footer-desc">可视化 Scratch / TurboWarp 扩展编辑器。在浏览器里拖积木，导出能直接用的扩展。</p>
+        </div>
+        <div>
+            <h5>产品</h5>
+            <ul>
+                <li><a href="./editor/">打开编辑器</a></li>
+                <li><a href="#features">功能</a></li>
+                <li><a href="#caps">积木能力</a></li>
+                <li><a href="./community.html">社区扩展</a></li>
+            </ul>
+        </div>
+        <div>
+            <h5>资源</h5>
+            <ul>
+                <li><a href="https://github.com/dhdbvcg/ForgeExt" target="_blank" rel="noopener">源码仓库</a></li>
+                <li><a href="https://github.com/dhdbvcg/ForgeExt-addons" target="_blank" rel="noopener">插件市场</a></li>
+                <li><a href="https://github.com/dhdbvcg/ForgeExt/issues" target="_blank" rel="noopener">问题反馈</a></li>
+            </ul>
+        </div>
+        <div>
+            <h5>关于</h5>
+            <ul>
+                <li><a href="privacy.html">隐私政策</a></li>
+                <li><a href="terms.html">使用条款</a></li>
+                <li><a href="ext-addons-doc.html">插件开发</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <span>ForgeExt · GPL-3.0 · 独立第三方工具，与 Scratch 基金会无隶属关系</span>
+        <span>用积木做扩展 ♡</span>
+    </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>插件开发与使用教程 · 扩展编辑器</title>
+<style>
+  :root {
+    --accent: #4c97ff;
+    --accent-soft: #f3f8ff;
+    --accent-border: #d6e6ff;
+    --code-bg: #1e1e2e;
+    --code-fg: #e6e6e6;
+    --ink: #1a1a1a;
+    --muted: #444;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #e5e5e5;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+  .doc-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.10);
+    overflow: hidden;
+  }
+  .doc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 22px;
+    background: #f2f2f2;
+    border-bottom: 1px solid #ddd;
+  }
+  .doc-title {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .doc-back {
+    font-size: 13px;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 5px 12px;
+    border: 1px solid var(--accent-border);
+    border-radius: 6px;
+    background: #fff;
+    white-space: nowrap;
+  }
+  .doc-back:hover { background: var(--accent-soft); }
+  .doc-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 22px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .doc-tab {
+    padding: 9px 18px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: transparent;
+    color: #555;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+  }
+  .doc-tab:hover { color: var(--accent); }
+  .doc-tab.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    font-weight: 600;
+  }
+  .doc-body {
+    padding: 18px 24px 26px;
+  }
+  .doc-body[hidden] { display: none; }
+  .doc-h3 {
+    margin: 20px 0 8px;
+    font-size: 15.5px;
+    color: #222;
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
+  }
+  .doc-h3:first-child { margin-top: 0; }
+  .doc-p { margin: 6px 0; color: var(--muted); font-size: 13.5px; }
+  .doc-ul, .doc-ol { margin: 6px 0; padding-left: 24px; color: var(--muted); font-size: 13.5px; }
+  .doc-ul li, .doc-ol li { margin: 5px 0; }
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+  .doc-table th, .doc-table td {
+    border: 1px solid #e2e6ea;
+    padding: 7px 11px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .doc-table th { background: #f5f7fa; color: #333; font-weight: 600; }
+  code {
+    background: #f0f2f5;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: 'Consolas', 'Menlo', monospace;
+    font-size: 12.5px;
+    color: #c0392b;
+  }
+  .code-block { position: relative; margin: 10px 0 16px; }
+  .copy-btn {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    z-index: 2;
+    padding: 3px 11px;
+    font-size: 11.5px;
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--accent-border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: #fff; border-color: var(--accent); }
+  pre {
+    margin: 0;
+    padding: 13px 15px;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 7px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Menlo', monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre;
+    tab-size: 2;
+  }
+  pre code { color: inherit; background: transparent; font-size: inherit; padding: 0; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 36px;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(30, 30, 46, 0.95);
+    color: #fff;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="doc-card">
+      <div class="doc-header">
+        <span class="doc-title">📘 插件开发与使用教程</span>
+        <a class="doc-back" href="./editor.html">← 返回编辑器</a>
+      </div>
+      <div class="doc-tabs">
+        <button type="button" class="doc-tab active" data-tab="dev">开发插件</button>
+        <button type="button" class="doc-tab" data-tab="usage">使用教程</button>
+      </div>
+
+      <!-- 开发插件 -->
+      <div class="doc-body" id="tab-dev">
+        <h3 class="doc-h3">一、插件结构</h3>
+        <p class="doc-p">一个插件是一个 JS 文件，导出包含以下字段的对象：</p>
+        <table class="doc-table">
+          <thead><tr><th>字段</th><th>必填</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>id</code></td><td>是</td><td>唯一标识，字母数字与短横线，如 <code>my-addon</code></td></tr>
+            <tr><td><code>name</code></td><td>是</td><td>插件显示名称</td></tr>
+            <tr><td><code>description</code></td><td>是</td><td>一句话功能说明</td></tr>
+            <tr><td><code>category</code></td><td>否</td><td>分类标签，如「自定义」「编辑器」</td></tr>
+            <tr><td><code>css</code></td><td>否</td><td>CSS 字符串，自动注入页面 &lt;head&gt;，禁用时自动移除</td></tr>
+            <tr><td><code>setup</code></td><td>是</td><td>初始化函数 <code>function(ctx)</code>，返回清理函数</td></tr>
+            <tr><td><code>options</code></td><td>否</td><td>子选项数组（自定义插件暂不支持）</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="doc-h3">二、setup 与 ctx</h3>
+        <p class="doc-p"><code>setup</code> 接收 <code>ctx</code> 对象，提供：</p>
+        <ul class="doc-ul">
+          <li><code>ctx.Blockly</code> —— scratch-blocks 的 Blockly 实例（原型、工具函数都在这里）</li>
+          <li><code>ctx.getWorkspace()</code> —— 返回当前积木工作区实例</li>
+          <li><code>ctx.addon</code> —— 当前插件自身的定义对象</li>
+          <li><code>ctx.document</code> / <code>ctx.window</code> —— 直接操作页面 DOM</li>
+          <li><code>ctx.createElement(tag, props, children)</code> —— 创建元素助手（自动挂事件/onX、style 对象、dataset）</li>
+          <li><code>ctx.injectCSS(css)</code> —— 注入一段样式（禁用时自动移除）</li>
+          <li><code>ctx.addToolbarButton(label, onClick, opts)</code> —— 在顶部工具栏右侧加一个按钮</li>
+          <li><code>ctx.mountPanel(opts)</code> —— 在主区挂一个浮动面板，返回 <code>{panel, body, remove}</code></li>
+          <li><code>ctx.effect(disposer)</code> / <code>ctx.addEventListener(target, ev, cb)</code> —— 注册可逆副作用，禁用时统一回收</li>
+          <li><code>ctx.assets</code> / <code>ctx.loadAsset(name)</code> / <code>ctx.loadAssetText(name)</code> / <code>ctx.assetNames</code> —— 读取插件包内资源（HTML·CSS·图片·JS 等，base64）</li>
+          <li><code>ctx.fileOverride(opt)</code> —— <strong>修改网页底层文件</strong>：覆盖 DOM 结构、注入 CSS/JS、替换图片、全局替换资源 URL，禁用时自动还原</li>
+        </ul>
+        <p class="doc-p"><code>setup</code> 必须返回一个 <strong>清理函数</strong>（可 <code>async</code> 返回）；也可以不返回、改用 <code>ctx.effect(fn)</code> 注册回收逻辑。重载页面或禁用插件时，所有注册的可逆操作都会被执行，用于还原原型、移除 DOM、解绑事件。</p>
+
+        <h3 class="doc-h3">二·五、导入格式：单个 JS / 文件夹 / ZIP</h3>
+        <p class="doc-p">在「设置 → 插件管理 → 安装插件」弹窗中，除粘贴来源外，还可本地导入：</p>
+        <ul class="doc-ul">
+          <li><strong>单个 JS</strong>：直接选中 <code>.js</code> 插件文件。</li>
+          <li><strong>文件夹</strong>：点「文件夹」后选整个目录，目录内需含 <code>index.js</code> 入口；其余 HTML·CSS·图片·JS 作为资源随插件持久化。</li>
+          <li><strong>ZIP 包</strong>：点「ZIP 包」选 <code>.zip</code>，包内需含 <code>index.js</code> 入口，其余文件作为资源。</li>
+        </ul>
+        <p class="doc-p">资源以 base64 形式存入 localStorage，页面重载后自动恢复，无需重新导入。</p>
+
+        <h3 class="doc-h3">三·五、读取资源与改写网页底层文件</h3>
+        <p class="doc-p">插件包内的资源可通过 <code>ctx.loadAsset()</code> 读取；<code>ctx.fileOverride()</code> 则提供「底层文件级」改造能力，所有改动在插件禁用时自动还原：</p>
+        <div class="code-block">
+          <button type="button" class="copy-btn">复制</button>
+          <pre><code>export default {
+  id: 'asset-and-override',
+  name: '资源与底层文件改写示例',
+  description: '读取 ZIP/文件夹 资源，并改写编辑器底层文件',
+  setup: function (ctx) {
+    // 1) 读取插件包内的图片资源并显示在按钮上
+    const icon = ctx.loadAsset('icon.png');     // base64 dataURL
+    const css  = ctx.loadAssetText('theme.css'); // 资源文本
+    if (css) ctx.injectCSS(css);
+
+    // 2) 改写网页底层文件（禁用时自动还原）
+    ctx.fileOverride({
+      // 替换某个图片元素的 src
+      images: { '.ext-logo img': icon },
+      // 覆盖某容器 HTML 结构
+      html: { selector: '.ext-builder-header', prepend: '&lt;div class="badge"&gt;插件已加载&lt;/div&gt;' },
+      // 注入整段 CSS 到 body
+      css: '.ext-builder { --brand: #2b7de9; }',
+      // 注入并执行脚本
+      js: 'console.log("插件底层脚本已运行");',
+      // 全局替换资源 URL
+      replaceUrl: { '/old-logo.png': '/new-logo.png' }
+    });
+
+    // 3) 返回清理函数（fileOverride 的还原会一并执行）
+    return function cleanup() {
+      console.log('插件已卸载');
+    };
+  }
+};</code></pre>
+        </div>
+
+        <h3 class="doc-h3">三、改造网页界面（改页能力）</h3>
+        <p class="doc-p">插件可以像 DeepSeek Harness 一样自由改造本编辑器界面——加按钮、挂面板、注入样式、操作任意 DOM：</p>
+        <div class="code-block">
+          <button type="button" class="copy-btn">复制</button>
+          <pre><code>export default {
+  id: 'page-mods',
+  name: '界面改造示例',
+  description: '加工具栏按钮 + 浮动面板 + 主题样式',
+  setup: function (ctx) {
+    // 1) 顶部工具栏加一个按钮
+    const btn = ctx.addToolbarButton('点我', () => {
+      alert('你好，来自插件 ' + ctx.addon.id);
+    }, {title: '示例按钮'});
+
+    // 2) 挂一个浮动面板
+    const panel = ctx.mountPanel({title: '我的面板', body: null});
+    panel.body.appendChild(ctx.createElement('p', {style: {color: '#2b7de9'}}, ['这是插件注入的面板内容']));
+
+    // 3) 注入主题样式
+    ctx.injectCSS('.ext-builder { outline: 2px dashed #2b7de9; }');
+
+    // 4) 直接操作 DOM
+    const title = ctx.document.querySelector('.ext-menu-title');
+    if (title) title.textContent = '扩展编辑器（已被插件改名）';
+
+    // 5) 返回清理函数（也可改用 ctx.effect）
+    return function cleanup () {
+      btn.remove();
+      panel.remove();
+    };
+  }
+};</code></pre>
+        </div>
+
+        <h3 class="doc-h3">四、完整示例</h3>
+
+        <h3 class="doc-h3">三、完整示例</h3>
+        <div class="code-block">
+          <button type="button" class="copy-btn">复制</button>
+          <pre><code>export default {
+  id: 'my-first-addon',
+  name: '我的第一个插件',
+  description: '给带注释的积木加高亮描边',
+  category: '自定义',
+  // 可选：CSS 自动注入页面 &lt;head&gt;，禁用时自动移除
+  css: '.blocklyMainBackground { opacity: 0.98; }',
+  // 必填：初始化函数，可写 async；返回清理函数
+  setup: function (ctx) {
+    const B = ctx.Blockly;
+    const ws = ctx.getWorkspace();
+
+    // 1) 覆写原型方法（增强 Blockly）
+    const origRender = B.BlockSvg.prototype.renderDraw_;
+    B.BlockSvg.prototype.renderDraw_ = function (...args) {
+      const r = origRender.call(this, ...args);
+      if (this.comment) this.svgPath_.setAttribute('stroke', '#ff8c1a');
+      return r;
+    };
+
+    // 2) 监听工作区事件
+    const onChange = (e) => {
+      if (e.isUiEvent) return;
+      console.log('积木变化:', e.type);
+    };
+    ws.addChangeListener(onChange);
+
+    // 3) 返回清理函数：还原一切
+    return function cleanup () {
+      B.BlockSvg.prototype.renderDraw_ = origRender;
+      ws.removeChangeListener(onChange);
+    };
+  }
+};</code></pre>
+        </div>
+      </div>
+
+      <!-- 使用教程 -->
+      <div class="doc-body" id="tab-usage" hidden>
+        <h3 class="doc-h3">零、从来源安装（对齐 DeepSeek Harness 的 dsh plugin add）</h3>
+        <p class="doc-p">打开「🧩 插件」面板 → 点蓝色「安装插件」，在弹窗里粘贴<strong>来源</strong>并点「安装」。支持：</p>
+        <ul class="doc-ul">
+          <li><code>npm 包名</code>（如 <code>my-addon</code> 或 <code>@scope/addon</code>，走 jsDelivr CDN）</li>
+          <li><code>github:owner/repo</code> 或简写 <code>owner/repo</code>（走 jsDelivr 的 GitHub 端点，自动找入口 JS）</li>
+          <li>直链 URL：<code>https://…/plugin.js</code>，或 <code>.tgz</code> / <code>.tar.gz</code> 压缩包（自动解包找 .js 入口）</li>
+          <li>本地文件：点「选择本地文件」选 <code>.js</code></li>
+        </ul>
+        <p class="doc-p">安装来源会被记录，插件项出现「更新」按钮，可一键按来源重新拉取最新版。无来源信息（如本地文件）则不显示「更新」。</p>
+
+        <h3 class="doc-h3">一、编写插件文件</h3>
+        <p class="doc-p">新建一个 <code>.js</code> 文件，两种写法皆可：</p>
+        <div class="code-block">
+          <button type="button" class="copy-btn">复制</button>
+          <pre><code>// 写法一：CommonJS
+module.exports = {
+  id: 'cjs-addon',
+  name: 'CJS 插件',
+  description: '示例',
+  setup: function (ctx) {
+    return function cleanup () {};
+  }
+};</code></pre>
+        </div>
+        <div class="code-block">
+          <button type="button" class="copy-btn">复制</button>
+          <pre><code>// 写法二：ES Module（推荐）
+export default {
+  id: 'esm-addon',
+  name: 'ESM 插件',
+  description: '示例',
+  setup: function (ctx) {
+    return function cleanup () {};
+  }
+};</code></pre>
+        </div>
+
+        <h3 class="doc-h3">二、安装并启用</h3>
+        <ol class="doc-ol">
+          <li>打开「🧩 插件」面板</li>
+          <li>点蓝色「安装插件」→ 粘贴来源（npm/github/URL/本地文件）</li>
+          <li>安装后插件自动出现在列表并<strong>立即启用</strong>，无需刷新</li>
+        </ol>
+
+        <h3 class="doc-h3">三、删除与管理</h3>
+        <ul class="doc-ul">
+          <li>自定义插件项右侧有「删除」按钮，确认后从本地移除</li>
+          <li>插件保存在浏览器 <code>localStorage</code>（键 <code>extbuilder_custom_addons</code>），刷新后仍在</li>
+          <li>与内置插件一样，勾选框可随时开关，开关即时生效</li>
+        </ul>
+
+        <h3 class="doc-h3">四、注意事项</h3>
+        <ul class="doc-ul">
+          <li>文件内<strong>不要使用</strong> <code>import</code> / <code>require</code> 语句（导入器不支持模块解析）</li>
+          <li><code>id</code> 必须唯一，与已有插件重复会导入失败</li>
+          <li>自定义插件暂不支持 <code>options</code> 子选项</li>
+          <li>务必在清理函数里还原你修改过的原型与监听，避免影响其它功能</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">已复制到剪贴板 ✓</div>
+
+  <script>
+    // 标签切换
+    var tabs = document.querySelectorAll('.doc-tab');
+    var panels = { dev: document.getElementById('tab-dev'), usage: document.getElementById('tab-usage') };
+    tabs.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-tab');
+        tabs.forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        Object.keys(panels).forEach(function (k) {
+          panels[k].hidden = (k !== key);
+        });
+      });
+    });
+
+    // 复制按钮
+    var toast = document.getElementById('toast');
+    var toastTimer = null;
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 1500);
+    }
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      return new Promise(function (resolve, reject) {
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          resolve();
+        } catch (e) { reject(e); }
+      });
+    }
+    document.querySelectorAll('.code-block').forEach(function (block) {
+      var btn = block.querySelector('.copy-btn');
+      var code = block.querySelector('code');
+      btn.addEventListener('click', function () {
+        copyText(code.innerText).then(function () {
+          var old = btn.textContent;
+          btn.textContent = '已复制 ✓';
+          showToast('已复制到剪贴板 ✓');
+          setTimeout(function () { btn.textContent = old; }, 1500);
+        }).catch(function () {
+          showToast('复制失败，请手动选择');
+        });
+      });
+    });
+  </script>
+</body>
+</html>

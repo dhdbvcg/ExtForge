@@ -94,7 +94,10 @@
 
 :global(body) {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background: #e5e5e5;
+    /* 顶层画布底色：浅蓝。积木工作区的点阵网格（blocklySvg）是半透明灰点，
+       铺在暖灰底上会显脏；改冷调浅蓝后点阵更干净，和 Blockly 积木的
+       蓝紫色系也更协调。 */
+    background: #eef4fb;
     color: #1a1a1a;
     font-size: 13px;
 }
@@ -106,7 +109,8 @@
     flex-direction: row;
     width: 100%;
     height: 100%;
-    background: #e5e5e5;
+    /* 与 body 同步：顶层画布浅蓝（见 :global(body) 的注释） */
+    background: #eef4fb;
     color: #1a1a1a;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 13px;

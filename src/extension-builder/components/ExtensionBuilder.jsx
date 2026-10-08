@@ -892,7 +892,9 @@ const ExtensionBuilderInner = () => {
                 grid: {
                     spacing: 25,
                     length: 3,
-                    colour: '#ccc',
+                    // 网格点随顶层底色走：顶层改浅蓝后，灰点会显脏，
+                    // 改成同色系蓝灰（比底色深一档，保持可辨识）
+                    colour: '#c9d9ee',
                     snap: false
                 },
                 zoom: {
@@ -3645,7 +3647,7 @@ const ExtensionBuilderInner = () => {
                 trashcan: false,
                 scrollbars: false,
                 zoom: {controls: false, wheel: false, startScale:1},
-                grid: {spacing: 8, length: 1, colour: '#fff', snap: false},
+                grid: {spacing: 8, length: 1, colour: '#c9d9ee', snap: false},
                 collapse: false
             });
         }
@@ -3713,7 +3715,7 @@ const ExtensionBuilderInner = () => {
                 trashcan: false,
                 scrollbars: false,
                 zoom: {controls: false, wheel: false, startScale: 1},
-                grid: {spacing: 8, length: 1, colour: '#fff', snap: false},
+                grid: {spacing: 8, length: 1, colour: '#c9d9ee', snap: false},
                 collapse: false
             });
         } catch (e) {

@@ -22,6 +22,10 @@ jobs:
       # webpack 4 用 md4 做模块哈希，Node 17+ 的 OpenSSL 3 默认归进 legacy provider，
       # 不开这个开关会直接报 ERR_OSSL_EVP_UNSUPPORTED。
       NODE_OPTIONS: --openssl-legacy-provider
+      # 站点在子路径 dhdbvcg.github.io/ForgeExt/，ROOT 决定 publicPath
+      #（运行时拼 JS / 图片资源的基准）。不设则是相对路径，编辑器页 /editor/
+      # 会把资源拼成 /editor/js/...，而实际在 /ForgeExt/js/... → 404。
+      ROOT: /ForgeExt/
 
     steps:
       - name: Checkout

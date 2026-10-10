@@ -22,18 +22,29 @@
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-    --brand: #fc4e4e;
-    --brand-dark: #e94545;
-    --brand-light: #ff8a8a;
+    /* 强调色与编辑器端保持一致（见 extension-builder.css 的 --fx-accent）：
+       从高饱和品牌红改为克制的靛蓝。工具类站点里，红色大面积铺开会
+       让「主操作 / 危险 / 错误」三件事混在一起。 */
+    --brand: #3b5bdb;
+    --brand-dark: #2f449f;
+    --brand-light: #5c74e4;
+    --brand-subtle: #edf0ff;
     --ink: #1f2329;
-    --ink-2: #4a5058;
-    --ink-3: #7a818a;
-    --line: #e4e7ec;
+    --ink-2: #5b6169;
+    --ink-3: #8b9199;
+    --line: #d8dbe0;
+    --line-subtle: #e8eaee;
     --bg: #ffffff;
-    --bg-tint: #f6f8fb;
-    --radius: 12px;
-    --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 16px rgba(16, 24, 40, .06);
-    --shadow-hover: 0 2px 6px rgba(16, 24, 40, .06), 0 12px 32px rgba(16, 24, 40, .10);
+    --bg-tint: #f7f8fa;
+    --bg-muted: #f0f1f4;
+    /* 圆角收敛成三档。改版前 13 处 border-radius 基本都是 12px，
+       整站被切成一片片圆角卡片，主次反而看不出来。 */
+    --radius-sm: 4px;
+    --radius: 6px;
+    --radius-lg: 8px;
+    /* 阴影只留给真正需要「浮起来」的地方（悬浮、hover 抬升）。 */
+    --shadow: 0 1px 2px rgba(31, 35, 41, .06);
+    --shadow-hover: 0 4px 12px rgba(31, 35, 41, .1);
 }
 
 * { box-sizing: border-box; }
@@ -57,9 +68,9 @@ a { color: inherit; text-decoration: none; }
     position: sticky;
     top: 0;
     z-index: 50;
-    background: var(--brand);
-    color: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
 }
 
 .nav-inner {
@@ -76,16 +87,16 @@ a { color: inherit; text-decoration: none; }
     display: flex;
     align-items: center;
     gap: 9px;
-    font-weight: 700;
-    font-size: 17px;
-    letter-spacing: .2px;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -.1px;
 }
 
 .brand-mark {
     width: 26px;
     height: 26px;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, .18);
+    border-radius: var(--radius-sm);
+    background: var(--brand);
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -96,34 +107,36 @@ a { color: inherit; text-decoration: none; }
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     margin-left: auto;
-    font-size: 14px;
+    font-size: 13.5px;
 }
 
 .nav-links a {
-    padding: 7px 12px;
-    border-radius: 8px;
-    opacity: .9;
-    transition: background .15s, opacity .15s;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-2);
+    font-weight: 500;
+    transition: background .12s, color .12s;
 }
 
-.nav-links a:hover { background: rgba(255, 255, 255, .16); opacity: 1; }
+.nav-links a:hover { background: var(--bg-muted); color: var(--ink); }
 
+/* 主操作：实心靛蓝，是这一栏唯一的重点 */
 .nav-cta {
-    background: #fff;
-    color: var(--brand-dark);
+    background: var(--brand);
+    color: #fff !important;
     font-weight: 600;
-    padding: 8px 16px !important;
-    border-radius: 8px;
-    opacity: 1;
+    padding: 7px 14px !important;
+    border-radius: var(--radius-sm);
+    margin-left: var(--fx-gap, 6px);
 }
 
-.nav-cta:hover { background: #fff; opacity: .92; }
+.nav-cta:hover { background: var(--brand-dark); }
 
 /* ── Hero ── */
 .hero {
-    background: linear-gradient(180deg, #fff 0%, var(--bg-tint) 100%);
+    background: var(--bg-tint);
     border-bottom: 1px solid var(--line);
 }
 
@@ -145,7 +158,7 @@ a { color: inherit; text-decoration: none; }
     font-weight: 600;
     color: var(--brand-dark);
     background: #fff;
-    border: 1px solid #ffd4d4;
+    border: 1px solid var(--brand-border, #c3cbf7);
     padding: 5px 12px;
     border-radius: 999px;
     margin-bottom: 20px;
@@ -156,7 +169,7 @@ a { color: inherit; text-decoration: none; }
     font-size: clamp(32px, 5vw, 50px);
     line-height: 1.18;
     letter-spacing: -.6px;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .hero h1 em {
@@ -183,11 +196,11 @@ a { color: inherit; text-decoration: none; }
     align-items: center;
     gap: 8px;
     padding: 12px 22px;
-    border-radius: 10px;
+    border-radius: var(--radius);
     font-size: 15px;
     font-weight: 600;
     border: 1px solid transparent;
-    transition: transform .14s, box-shadow .14s, background .14s;
+    transition: transform .12s, box-shadow .14s, background .14s;
 }
 
 .btn svg { width: 17px; height: 17px; flex-shrink: 0; }
@@ -221,14 +234,14 @@ a { color: inherit; text-decoration: none; }
     color: var(--ink-3);
 }
 
-.hero-note a { color: var(--brand-dark); border-bottom: 1px solid #ffd4d4; }
+.hero-note a { color: var(--brand-dark); border-bottom: 1px solid var(--brand-border, #c3cbf7); }
 .hero-note a:hover { border-bottom-color: var(--brand); }
 
 /* Hero 侧栏：编辑器缩略示意 */
 .hero-card {
     background: #fff;
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
     overflow: hidden;
 }
@@ -334,8 +347,8 @@ a { color: inherit; text-decoration: none; }
 .card-icon {
     width: 38px;
     height: 38px;
-    border-radius: 10px;
-    background: #fff1f1;
+    border-radius: var(--radius);
+    background: var(--brand-subtle);
     display: grid;
     place-items: center;
     margin-bottom: 15px;
@@ -343,7 +356,7 @@ a { color: inherit; text-decoration: none; }
 
 .card-icon svg { width: 20px; height: 20px; stroke: var(--brand); }
 
-.card h3 { margin: 0 0 8px; font-size: 16.5px; font-weight: 700; }
+.card h3 { margin: 0 0 8px; font-size: 16.5px; font-weight: 600; }
 .card p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
 
 /* ── 流程条 ── */
@@ -361,7 +374,7 @@ a { color: inherit; text-decoration: none; }
     top: 40px;
     right: 0;
     height: 2px;
-    background: linear-gradient(90deg, #ffd4d4, #ffe9e9);
+    background: linear-gradient(90deg, var(--brand-border, #c3cbf7), #ffe9e9);
 }
 
 .step-num {

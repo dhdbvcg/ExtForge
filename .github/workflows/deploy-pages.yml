@@ -38,8 +38,13 @@ jobs:
 
       # 仓库不跟踪 package-lock.json：scratch-vm / scratch-blocks / scratch-render
       # 这些依赖直接跟 TurboWarp 的 develop 分支，锁死版本反而拿不到上游修复。
+      #
+      # --legacy-peer-deps 是必需的：webpack 锁在 4.x（scratch-blocks 只兼容这个
+      # 大版本），而 @webpack-cli/serve 的 peer 要求是 webpack ^5，新版 npm 遇到
+      # 这种冲突会直接 ERESOLVE 失败而不是警告。这里的版本组合是经过验证的，
+      # 加该参数即按旧行为安装。
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
         run: npx webpack --colors --bail

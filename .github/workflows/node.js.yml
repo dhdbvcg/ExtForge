@@ -31,7 +31,6 @@ jobs:
     # 刻意不走 `npm run build`：那条脚本第一步是 rimraf 整个 build/，
     # 而 build/ 下的 main.js、ext-plugin-runtime.js、package.json、installer.nsh
     # 是手写的桌面端源码、被 git 跟踪 —— 删掉就没了。这里只跑 webpack。
-    # 直接调用本地 webpack（不用 npx —— 否则会去下载 webpack@5 并因缺 CLI
-    # 交互式提问卡死到超时，原因同 deploy-pages.yml）。
+    # 用 npm run build:web（只跑 webpack，不删 build/），原因同 deploy-pages.yml
     - name: Build
-      run: node node_modules/webpack/bin/webpack.js --colors --bail
+      run: npm run build:web

@@ -50,11 +50,26 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --legacy-peer-deps
 
-      # 必须直接调用本地 webpack，不能用 `npx webpack`：npx 发现本地 bin 不在
-      # PATH 时会去下载最新的 webpack@5，随后又因缺 CLI 交互式提问而卡死到
-      # 超时。项目锁的是 webpack 4.47.0（scratch-blocks 只兼容这个大版本）。
+      # 显式锁定构建工具链版本。仓库不跟踪 package-lock.json，npm 可能解析出
+      # 与本地不一致的版本；曾出现过云端装完 node_modules/webpack/bin 缺失
+      # 导致构建失败的情况。这里强制对齐本地验证过的组合，并打印版本便于排查。
+      - name: Pin build toolchain
+        run: |
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps webpack@4.47.0 webpack-cli@3.3.12
+          npm ls webpack webpack-cli
+          ls node_modules/webpack/bin/
+
+      # 用 npm run build:web（只跑 webpack，不 rimraf build/）：
+      #   - 不用 `npm run build`：那条第一步 rimraf 整个 build/，而 build/ 下的
+      #     main.js、ext-plugin-runtime.js、package.json、installer.nsh 是被
+      #     git 跟踪的手写桌面端源码，删掉就没了。
+      #   - 不用 `npx webpack`：npx 会去下载 webpack@5（项目锁 4.47.0）并因缺
+      #     CLI 交互式提问卡死到超时。
+      #   - 不直接 `node node_modules/webpack/bin/webpack.js`：云端 npm install
+      #     后的 webpack 包结构不完整，该路径 MODULE_NOT_FOUND。
+      #     走 npm script 能让 npm 自己解析 .bin/webpack。
       - name: Build
-        run: node node_modules/webpack/bin/webpack.js --colors --bail
+        run: npm run build:web
 
       - name: Add .nojekyll
         run: touch build/.nojekyll

@@ -16,6 +16,7 @@
   "scripts": {
     "build": "npm run clean && webpack --colors --bail",
     "clean": "rimraf ./build && mkdirp build",
+    "build:web": "webpack --colors --bail",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
     "start": "webpack-dev-server",
     "watch": "webpack --colors --watch"

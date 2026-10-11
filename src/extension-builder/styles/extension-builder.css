@@ -12,13 +12,13 @@
 
 :root {
     /* ---- 强调色 ----
-       从高饱和品牌红改为克制的靛蓝：工具类界面里，红色大面积铺开
-       会让「危险 / 错误 / 主操作」三件事混在一起分不清。 */
-    --fx-accent: #3b5bdb;
-    --fx-accent-hover: #364fc7;
-    --fx-accent-active: #2f449f;
-    --fx-accent-subtle: #edf0ff;
-    --fx-accent-border: #c3cbf7;
+       与顶栏的 TurboWarp GUI 蓝保持一致（#2196f3）。整站强调色统一到
+       这一个蓝，避免顶栏蓝 + 交互靛蓝两种蓝打架。 */
+    --fx-accent: #2196f3;
+    --fx-accent-hover: #1e88e5;
+    --fx-accent-active: #1976d2;
+    --fx-accent-subtle: #e3f2fd;
+    --fx-accent-border: #90caf9;
 
     /* ---- 中性色阶（灰）----
        对比度按 WCAG：正文 #1f2329 on var(--fx-bg) ≈ 14:1，次要 #5b6169 ≈ 6.4:1，
@@ -93,11 +93,12 @@
 }
 
 :global(body) {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    /* 顶层画布底色：浅蓝。积木工作区的点阵网格（blocklySvg）是半透明灰点，
-       铺在暖灰底上会显脏；改冷调浅蓝后点阵更干净，和 Blockly 积木的
-       蓝紫色系也更协调。 */
-    background: #eef4fb;
+    /* AstraEditor / TurboWarp 用 Noto Sans SC：中文优先，字形比 Helvetica
+       的中文回退（会掉到宋体/默认）规整得多，且中英文混排时基线一致。 */
+    font-family: 'Noto Sans SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    /* 顶层画布底色：浅灰白（AstraEditor 工作区色）。
+       比原来的浅蓝更中性，积木的点阵网格与彩色积木都不会被底色带偏。 */
+    background: #f2f3f5;
     color: #1a1a1a;
     font-size: 13px;
 }
@@ -109,10 +110,10 @@
     flex-direction: row;
     width: 100%;
     height: 100%;
-    /* 与 body 同步：顶层画布浅蓝（见 :global(body) 的注释） */
-    background: #eef4fb;
+    /* 与 body 同步（见 :global(body) 注释） */
+    background: #f2f3f5;
     color: #1a1a1a;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: 'Noto Sans SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-size: 13px;
     overflow: hidden;
     position: relative;
@@ -120,16 +121,18 @@
 
 /* ---- Left icon rail (AstraEditor style: 制作积木 pinned to far left) ---- */
 
+/* 左图标栏：参考站是白底细栏 + 线性图标（图标本身是深色），
+   不是深灰底。白底能让整条左栏「消失」成背景，视觉重量让给积木区。 */
 :global(.ext-builder-left) {
     width: 48px;
     flex-shrink: 0;
-    background: #343434;
+    background: #fff;
+    border-right: 1px solid var(--fx-border);
     display: flex;
     flex-direction: column;
     align-items: center;
     padding-top: 8px;
     gap: 6px;
-    box-shadow: 1px 0 4px rgba(0, 0, 0, 0.25);
     overflow: hidden;
 }
 
@@ -148,12 +151,13 @@
 }
 
 :global(.ext-left-btn:hover) {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--fx-bg-muted);
 }
 
+/* 选中态：蓝底蓝边，与顶栏的蓝色呼应 */
 :global(.ext-left-btn.active) {
-    background: rgba(255, 255, 255, 0.18);
-    box-shadow: inset 0 0 0 2px #4c97ff;
+    background: var(--fx-accent-subtle);
+    box-shadow: inset 0 0 0 2px var(--fx-accent);
 }
 
 :global(.ext-left-btn-img) {
@@ -1064,24 +1068,20 @@
     width: 100%;
 }
 
-/* ── 顶部菜单栏 ──
-   改版：纯红渐变铺满 → 白底 + 1px 底边 + 靛蓝强调。
-   原来整条高饱和红 + 半透明白按钮（rgba(255,255,255,.1)）是「AI 生成界面」
-   的典型特征：颜色抢戏、控件边界糊在一起。改成中性底后，控件靠
-   边框和 hover 底色区分，扩展名（真正要看的信息）才浮得出来。 */
+/* ── 顶部菜单栏（AstraEditor 风格：亮蓝底 + 紧凑高度）──
+   参考 editors.astras.top：顶栏是 TurboWarp 默认的 GUI 蓝（#2196f3 系），
+   高度约 32px、文字为白色、菜单无图标只有文字。整条色带是界面的主标识，
+   比白底顶栏更像一个「编辑器」而不是一个「网页」。 */
 :global(.ext-menu-bar) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 40px;
-    background: var(--fx-bg);
-    border-bottom: 1px solid var(--fx-border);
-    color: var(--fx-text);
-    padding: 0 10px;
+    height: 32px;
+    background: #2196f3;
+    color: #fff;
+    padding: 0 6px;
     flex-shrink: 0;
     user-select: none;
-    /* 积木计数徽章是 absolute 钉在菜单栏右端的（见 .ext-block-count-badge），
-       需要这里作为定位基准。 */
     position: relative;
 }
 
@@ -1113,50 +1113,48 @@
     gap: 6px;
     padding-right: var(--fx-gap-3);
     margin-right: var(--fx-gap-1);
-    border-right: 1px solid var(--fx-border);
-    height: 24px;
+    border-right: 1px solid rgba(255, 255, 255, 0.3);
+    height: 22px;
 }
 
 :global(.ext-menu-logo) {
-    font-size: 16px;
-    color: var(--fx-accent);
+    font-size: 15px;
+    color: #fff;
     line-height: 1;
 }
 
 :global(.ext-menu-title) {
     font-weight: var(--fw-semibold);
-    font-size: 13.5px;
-    color: var(--fx-text);
+    font-size: 13px;
+    color: #fff;
     letter-spacing: -.1px;
 }
 
-/* 按钮：改为「透明底 + 1px 透明边框」，hover 时才显形。
-   常态不画框是 GitHub 顶栏的做法：视觉安静，hover 才有反馈。 */
+/* 按钮：蓝底上常态透明、hover 才显形（TurboWarp 顶栏的做法）。
+   hover 用加深的蓝而不是白色半透明 —— 参考站的顶栏交互是「底色变深」。 */
 :global(.ext-menu-btn) {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 9px;
+    padding: 4px 8px;
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--fx-radius-sm);
-    color: var(--fx-text-2);
+    border: none;
+    border-radius: 3px;
+    color: #fff;
     cursor: pointer;
-    font-size: 12.5px;
+    font-size: 12px;
     font-family: inherit;
-    font-weight: var(--fw-medium);
-    transition: background var(--fx-t), color var(--fx-t), border-color var(--fx-t);
+    font-weight: var(--fw-normal);
+    transition: background var(--fx-t);
     white-space: nowrap;
 }
 
 :global(.ext-menu-btn:hover) {
-    background: var(--fx-bg-muted);
-    border-color: var(--fx-border);
-    color: var(--fx-text);
+    background: rgba(0, 0, 0, 0.15);
 }
 
 :global(.ext-menu-btn:active) {
-    background: var(--fx-bg-inset);
+    background: rgba(0, 0, 0, 0.25);
 }
 
 :global(.ext-menu-btn-icon) {
@@ -1171,23 +1169,21 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 9px;
+    padding: 4px 8px;
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--fx-radius-sm);
-    color: var(--fx-text-2);
+    border: none;
+    border-radius: 3px;
+    color: #fff;
     cursor: pointer;
-    font-size: 12.5px;
-    font-weight: var(--fw-medium);
+    font-size: 12px;
+    font-weight: var(--fw-normal);
     font-family: inherit;
     text-decoration: none;
-    transition: background var(--fx-t), color var(--fx-t), border-color var(--fx-t);
+    transition: background var(--fx-t);
 }
 
 :global(.ext-menu-home-link:hover) {
-    background: var(--fx-bg-muted);
-    border-color: var(--fx-border);
-    color: var(--fx-text);
+    background: rgba(0, 0, 0, 0.15);
 }
 
 :global(.ext-menu-home-icon) {
@@ -1195,16 +1191,17 @@
     line-height: 1;
 }
 
-/* 「重置」这类破坏性操作：平时低调，hover 才转红 */
+/* 「重置」这类破坏性操作：蓝底上仍用深色 hover 区分，
+   破坏性靠文案表达，不用额外的红色（顶栏已是蓝色，再叠红会显脏） */
 :global(.ext-menu-btn-warn) {
     background: transparent;
     border-color: transparent;
-    color: var(--fx-text-2);
+    color: #fff;
 }
 :global(.ext-menu-btn-warn:hover) {
-    background: #fff2f0;
-    border-color: #ffc9c2;
-    color: #c92a1c;
+    background: rgba(0, 0, 0, 0.15);
+    border-color: transparent;
+    color: #fff;
 }
 
 :global(.ext-menu-btn-switch) {
@@ -1212,20 +1209,20 @@
     border-color: transparent;
 }
 :global(.ext-menu-btn-switch:hover) {
-    background: var(--fx-bg-muted);
-    border-color: var(--fx-border);
+    background: rgba(0, 0, 0, 0.15);
 }
 
+/* 扩展名：蓝底白字，是这一栏的重点信息 */
 :global(.ext-menu-ext-name) {
     font-weight: var(--fw-semibold);
-    color: var(--fx-text);
+    color: #fff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 :global(.ext-menu-ext-id) {
-    color: var(--fx-text-3);
+    color: rgba(255, 255, 255, 0.85);
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 11.5px;
 }
@@ -3834,30 +3831,29 @@
     align-items: center;
     gap: 5px;
     padding: 3px 9px;
-    /* 菜单栏从红底改成白底后，这里原本的「半透明白底 + 白字」会整个隐形。
-       改成中性底 + 深字；徽章是次要信息，不该比扩展名更抢眼。 */
-    background: var(--fx-bg-subtle);
-    border: 1px solid var(--fx-border);
-    border-radius: var(--fx-radius-sm);
-    color: var(--fx-text-2);
+    /* 顶栏改回蓝底后，这里同步改成蓝底白字（AstraEditor 也是直接把
+       「N 个积木」写在顶栏上，不额外做徽章）。 */
+    background: rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+    color: #fff;
     font-size: 11.5px;
     cursor: pointer;
-    transition: background var(--fx-t), border-color var(--fx-t), color var(--fx-t);
+    transition: background var(--fx-t), border-color var(--fx-t);
     user-select: none;
     white-space: nowrap;
     z-index: 5;
 }
 :global(.ext-block-count-badge:hover) {
-    background: var(--fx-bg-muted);
-    border-color: var(--fx-border-strong);
-    color: var(--fx-text);
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
 }
 :global(.ext-block-count-num) {
     font-weight: var(--fw-semibold);
     font-size: 13px;
 }
 :global(.ext-block-count-label) {
-    color: var(--fx-text-3);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 /* ── 代码区底部状态栏增强 ── */

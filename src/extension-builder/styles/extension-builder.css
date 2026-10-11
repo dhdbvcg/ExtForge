@@ -27,10 +27,10 @@
     --fx-text: #1f2329;          /* 标题、正文、积木文字 */
     --fx-text-2: #5b6169;        /* 次要说明、标签 */
     --fx-text-3: #8b9199;        /* 占位符、禁用态 */
-    --fx-text-inv: var(--fx-bg);
+    --fx-text-inv: #ffffff;      /* 深底上的文字（反色）*/
 
     /* ---- 背景 ---- */
-    --fx-bg: var(--fx-bg);
+    --fx-bg: #ffffff;            /* 页面/面板底 */
     --fx-bg-subtle: #f7f8fa;    /* 侧栏、工具区底 */
     --fx-bg-muted: #f0f1f4;     /* hover 底、输入框底 */
     --fx-bg-inset: #eef0f3;      /* 代码区等「下沉」区域 */

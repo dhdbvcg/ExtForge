@@ -99,7 +99,9 @@
         'use strict';
 
         var theme = '';
-        var accent = '#ff4c4c';
+        // 加载页底色与编辑器顶栏的 TurboWarp GUI 蓝一致（#2196f3）。
+        // 原默认是 #ff4c4c 红，与改版后的蓝色界面不搭。
+        var accent = '#2196f3';
 
         try {
           var themeSetting = localStorage.getItem('tw:theme');

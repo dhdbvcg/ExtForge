@@ -50,8 +50,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --legacy-peer-deps
 
+      # 必须直接调用本地 webpack，不能用 `npx webpack`：npx 发现本地 bin 不在
+      # PATH 时会去下载最新的 webpack@5，随后又因缺 CLI 交互式提问而卡死到
+      # 超时。项目锁的是 webpack 4.47.0（scratch-blocks 只兼容这个大版本）。
       - name: Build
-        run: npx webpack --colors --bail
+        run: node node_modules/webpack/bin/webpack.js --colors --bail
 
       - name: Add .nojekyll
         run: touch build/.nojekyll

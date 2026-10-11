@@ -51,12 +51,16 @@ jobs:
         run: npm install --no-audit --no-fund --legacy-peer-deps
 
       # 显式锁定构建工具链版本。仓库不跟踪 package-lock.json，npm 可能解析出
-      # 与本地不一致的版本；曾出现过云端装完 node_modules/webpack/bin 缺失
-      # 导致构建失败的情况。这里强制对齐本地验证过的组合，并打印版本便于排查。
+      # 与本地不一致的版本。这里强制对齐本地验证过的组合。
+      #
+      # 注意 npm ls 在这里会以非零码退出：@webpack-cli/serve 的 peer 要求
+      # webpack ^5，与锁定的 4.47.0 冲突，npm ls 会标 invalid（ELSPROBLEMS）。
+      # 该冲突本身无害（已用 --legacy-peer-deps 安装成功），所以诊断命令
+      # 一律加 || true，避免把成功的构建判成失败。
       - name: Pin build toolchain
         run: |
           npm install --no-save --no-audit --no-fund --legacy-peer-deps webpack@4.47.0 webpack-cli@3.3.12
-          npm ls webpack webpack-cli
+          npm ls webpack webpack-cli || true
           ls node_modules/webpack/bin/
 
       # 用 npm run build:web（只跑 webpack，不 rimraf build/）：

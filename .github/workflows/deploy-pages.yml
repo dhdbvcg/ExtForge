@@ -22,10 +22,10 @@ jobs:
       # webpack 4 用 md4 做模块哈希，Node 17+ 的 OpenSSL 3 默认归进 legacy provider，
       # 不开这个开关会直接报 ERR_OSSL_EVP_UNSUPPORTED。
       NODE_OPTIONS: --openssl-legacy-provider
-      # 必须是 production：否则 webpack 走 development 分支，产物是
-      # editor.js（无 contenthash、体积大、带 dev 特性），且文件名不随内容
-      # 变化 —— 用户端会一直拿到浏览器缓存里的旧版。
-      NODE_ENV: production
+      # 注意：NODE_ENV=production **不能**放在 job 级 —— npm 在该模式下会跳过
+      # devDependencies，而 webpack 正是 devDependency，结果是云端
+      # node_modules 里根本没有 webpack（npm ls 显示 empty），构建必然失败。
+      # 所以它只在 Build 步骤里设（见下）。
       # 站点在子路径 dhdbvcg.github.io/ForgeExt/，ROOT 决定 publicPath
       #（运行时拼 JS / 图片资源的基准）。不设则是相对路径，编辑器页 /editor/
       # 会把资源拼成 /editor/js/...，而实际在 /ForgeExt/js/... → 404。
@@ -65,11 +65,12 @@ jobs:
       #     git 跟踪的手写桌面端源码，删掉就没了。
       #   - 不用 `npx webpack`：npx 会去下载 webpack@5（项目锁 4.47.0）并因缺
       #     CLI 交互式提问卡死到超时。
-      #   - 不直接 `node node_modules/webpack/bin/webpack.js`：云端 npm install
-      #     后的 webpack 包结构不完整，该路径 MODULE_NOT_FOUND。
-      #     走 npm script 能让 npm 自己解析 .bin/webpack。
+      # NODE_ENV=production 只在这里设（理由见上方 env 注释）：让 webpack 走
+      # production 分支，产物带 contenthash，内容变则文件名变、缓存自动失效。
       - name: Build
         run: npm run build:web
+        env:
+          NODE_ENV: production
 
       - name: Add .nojekyll
         run: touch build/.nojekyll
